@@ -11,7 +11,6 @@ int hasDataVaildC2;
 int hasDataVaildC3;
 int hasDataVaildC8;
 
-//#define CURVE_DEBUG
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow),m_xLength(0),C1m_xLength(0),C3m_xLength(0),C5m_xLength(0),C6m_xLength(0),C8m_xLength(0),SaveFileRecord(400000),dataInvaildRecord(0),isDegree(1),latitude(0),C1latitudeCurveRun(0),headingAngle(0),C1headingAngleRun(0),longitude(0),C1longitudeRun(0),rollAngle(0),C1rollAngleRun(0),pitchAngle(0),C1pitchAngleRun(0),northSpeed(0),C1northSpeedRun(0),eastSpeed(0),C1eastSpeedRun(0),headingAngularSpeed(0),C1headingAngularSpeedRun(0),rollAngleSpeed(0),C1rollAngleSpeedRun(0),pitchAngleSpeed(0),C1pitchAngleSpeedRun(0),
