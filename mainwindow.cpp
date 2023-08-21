@@ -35,7 +35,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     this->setLED1(ui->label_69,1,15);
 
-    this->setWindowTitle("惯导调试上位机v3.2.0");
+    this->setWindowTitle("惯导调试上位机v3.2.1");
     ui->comboBox->setVisible(true);
     ui->comboBox_2->setVisible(false);
 
@@ -4946,7 +4946,7 @@ void MainWindow::   handleResults()
                 double refLatitudeAbsMin  =  (refLatitudeAbs - refLatitudeAbsDeg)* 60.0;
                 QString refLatitudeMinStr = QString::number(refLatitudeAbsMin,'f',3);
                 QString refLatitudeStrDis = NS+refLatitudeDegStr+"°"+refLatitudeMinStr+"′";
-                QString refLatitudeStrDis_D = refLatStr;
+                QString refLatitudeStrDis_D = QString::number(refLatitude,'f',8);
                 if(isDegree == 0)
                     ui->lineEdit_24->setText(refLatitudeStrDis);
                 else
@@ -4972,7 +4972,7 @@ void MainWindow::   handleResults()
                 double reflongitudeAbsMin  =  (reflongitudeAbs - reflongitudeAbsDeg)* 60.0;
                 QString reflongitudeMinStr = QString::number(reflongitudeAbsMin,'f',3);
                 QString reflongitudeStrDis = WE+reflongitudeDegStr+"°"+reflongitudeMinStr+"′";
-                QString reflongitudeStrDis_D = reflongStr;
+                QString reflongitudeStrDis_D = QString::number(reflongitude,'f',8);;
                 if(isDegree == 0)
                     ui->lineEdit_25->setText(reflongitudeStrDis);
                 else
