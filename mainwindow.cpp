@@ -4506,7 +4506,7 @@ void MainWindow::   handleResults()
 
                     QString latitudeMinStr = QString::number(latitudeAbsMin,'f',3);
                     latitudeStrDis = NS+latitudeDegStr+"°"+latitudeMinStr+"′";
-                    latitudeStrDis_D = latStr;
+                    latitudeStrDis_D = QString::number(latitude,'f',9);
 
                     if(isDegree == 0)
                         ui->lineEdit_7->setText(latitudeStrDis);
@@ -4539,7 +4539,7 @@ void MainWindow::   handleResults()
                     double longitudeAbsMin  =  (longitudeAbs - longitudeAbsDeg)* 60.0;
                     QString longitudeMinStr = QString::number(longitudeAbsMin,'f',3);
                     longitudeStrDis = WE+longitudeDegStr+"°"+longitudeMinStr+"′";
-                    longitudeStrDis_D = lontStr;
+                    longitudeStrDis_D = QString::number(longitude,'f',9);
 
 
                     if(isDegree == 0)
