@@ -35,7 +35,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     this->setLED1(ui->label_69,1,15);
 
-    this->setWindowTitle("惯导调试上位机v3.2.1");
+    this->setWindowTitle("惯导调试上位机v3.2.2");
     ui->comboBox->setVisible(true);
     ui->comboBox_2->setVisible(false);
 
@@ -4151,6 +4151,7 @@ void MainWindow::   handleResults()
         ui->lineEdit_32	->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_33	->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_34	->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_55 ->setStyleSheet("color: rgb(0, 0, 0);");
 
     }
     if(hasDataVaildC3> 60)
@@ -4591,17 +4592,39 @@ void MainWindow::   handleResults()
                 QString headingAngleStrDis_D;
                 if(headingVaild == "1")
                 {
+                    QString headingStr;
+                    double headingAngleAbsDeg;
+                    QString headingAngleAbsStr;
+                    double headingAngleMin;
+                    QString headingAngleMinStr;
 
                     QString headingAngleStr = bufferStrC1.left(8).mid(6,2)+bufferStrC1.left(8).mid(4,2)+bufferStrC1.left(8).mid(2,2)+bufferStrC1.left(8).mid(0,2);
                     quint32 headingAngleInt32 = quint32(headingAngleStr.toUInt(nullptr,16));
                     headingAngle = headingAngleInt32 * 360.00000 * qPow(2,-32);
-                    QString headingStr = QString::number(headingAngle,'f',4);
-                    double headingAngleAbsDeg =  floor(headingStr.toFloat());
-                    QString headingAngleAbsStr = QString("%1").arg(headingAngleAbsDeg);
-                    double headingAngleMin  =  (headingAngle - headingAngleAbsDeg)* 60.0;
-                    QString headingAngleMinStr = QString::number(headingAngleMin,'f',3);
-                    headingAngleStrDis = headingAngleAbsStr+"°"+headingAngleMinStr+"′";
-                    headingAngleStrDis_D = headingStr;
+                    //headingAngle = 214.56;
+
+//                    if(headingAngle<=180)
+//                    {
+                        headingStr = QString::number(headingAngle,'f',4);
+                        headingAngleAbsDeg =  floor(headingStr.toFloat());
+                        headingAngleAbsStr = QString("%1").arg(headingAngleAbsDeg);
+                        headingAngleMin  =  (headingAngle - headingAngleAbsDeg)* 60.0;
+                        headingAngleMinStr = QString::number(headingAngleMin,'f',3);
+                        headingAngleStrDis = headingAngleAbsStr+"°"+headingAngleMinStr+"′";
+                        headingAngleStrDis_D = headingStr;
+                    //}
+//                    else
+//                    {
+//                        headingAngle = headingAngle - 360.0;
+//                        headingStr = QString::number(headingAngle,'f',4);
+//                        headingAngleAbsDeg =  floor(fabs(headingAngle));
+//                        headingAngleAbsStr = QString("%1").arg(headingAngleAbsDeg);
+//                        headingAngleMin  =  (fabs(headingAngle) - headingAngleAbsDeg)* 60.0;
+//                        headingAngleMinStr = QString::number(headingAngleMin,'f',3);
+//                        headingAngleStrDis = "-"+headingAngleAbsStr+"°"+headingAngleMinStr+"′";
+//                        headingAngleStrDis_D =  QString::number(headingAngle,'f',4);
+//                    }
+
 
                     if(isDegree == 0)
                         ui->lineEdit_9->setText(headingAngleStrDis);
@@ -5599,7 +5622,7 @@ void MainWindow::   handleResults()
                 if((C3WDDPLBottomHeightVaild == "1") || (C3WDLogBottomHeightVaild == "1") || (C3BDDPLBottomHeightVaild == "1") ||  C3BDLogBottomHeightVaild == "1")
                 {
                     ui->lineEdit_54->setStyleSheet("color: rgb(0, 0, 255);");
-                    ui->label_55->setStyleSheet("font:bold;color:rgb(0,200,50)");
+                     ui->label_55->setStyleSheet("font:bold;color:rgb(0,200,50)");
                 }
                 else
                 {
@@ -6810,6 +6833,46 @@ void MainWindow::   handleResults()
             }
         }
 
+        /**********************************************PS入水深度数据CA******************************************************************/
+
+        else if(bufferStr[0] == 'e' && bufferStr[1] == 'b'&&bufferStr[2] == '9' && bufferStr[3] == '0'&&bufferStr[4] == 'c' && bufferStr[5] == 'a')
+        {
+
+            QString bufferStrCA = bufferStr;
+            if(bufferStrCA.size() != 18)
+            {
+                continue;
+            }
+            int CAcheckNumInt = 0;
+            QString CAcheckNumStr;
+            for(int i= 4;i<16;i=i+2)
+            {
+                CAcheckNumInt = CAcheckNumInt + bufferStrCA.mid(i,2).toInt(nullptr,16);
+            }
+            CAcheckNumStr = QString::number(CAcheckNumInt,16).right(2);
+            if(CAcheckNumStr == bufferStrCA.mid(16,2))
+            {
+                bufferStrCA.remove(0,6);
+                QString CAPSValidStr = bufferStrCA.left(2).mid(0,2);
+                if(CAPSValidStr == "00")
+                    ui->lineEdit_55->setStyleSheet( "color: rgb(0, 0, 0);" );
+                else
+                {
+                    ui->lineEdit_55->setStyleSheet( "color: rgb(0, 0, 255);" );
+
+                }
+                bufferStrCA.remove(0,2);
+                QString CASysTimeStr = bufferStrCA.left(8).mid(6,2)+bufferStrCA.left(8).mid(4,2)+bufferStrCA.left(8).mid(2,2)+bufferStrCA.left(8).mid(0,2);
+
+                qint32 CAsysTimeMs = qint32(CASysTimeStr.toUInt(nullptr,16)) ;   //ps入水深度
+
+                double dCAsysTimeMs = CAsysTimeMs * pow(10,-4);
+
+                ui->lineEdit_55->setText(QString::number(dCAsysTimeMs,'f',4)+"m");
+
+
+            }
+        }
 
         /********************************************************初始位置信息数据格式01*******************************************************************/
         else if(bufferStr[0] == 'e' && bufferStr[1] == 'b'&&bufferStr[2] == '9' && bufferStr[3] == '0'&&bufferStr[4] == '0' && bufferStr[5] == '1')
@@ -8299,6 +8362,7 @@ void MainWindow::on_btn_openPort_clicked()
             ui->lineEdit_51->setText("0.0000kn");
             ui->lineEdit_52->setText("0.0000kn");
             ui->lineEdit_54->setText("0.0000m");
+            ui->lineEdit_55->setText("0.0000m");
             this->setLED1(ui->label_69,2,15);
             serial_1->setTimeout(10);
             qtime->start();
@@ -8381,6 +8445,7 @@ void MainWindow::on_btn_openPort_clicked()
         ui->lineEdit_51 ->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_52 ->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_54 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_55 ->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_50 ->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_46 ->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_45 ->setStyleSheet("color: rgb(0, 0, 0);");
@@ -8450,6 +8515,7 @@ void MainWindow::InitClear()
     ui->lineEdit_51->clear();
     ui->lineEdit_52->clear();
     ui->lineEdit_54->clear();
+    ui->lineEdit_55->clear();
     ui->lineEdit_50->clear();
     ui->lineEdit_46->clear();
     ui->lineEdit_45->clear();
