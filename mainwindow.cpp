@@ -35,7 +35,7 @@ MainWindow::MainWindow(QWidget *parent)
     ui->setupUi(this);
     this->setLED1(ui->label_69,1,15);
 
-    this->setWindowTitle("惯导调试上位机v3.2.2");
+    this->setWindowTitle("惯导调试上位机v3.2.3");
     ui->comboBox->setVisible(true);
     ui->comboBox_2->setVisible(false);
 
@@ -4499,7 +4499,7 @@ void MainWindow::   handleResults()
                     else{
                         NS= 'S';
                     }
-                    QString latStr = QString::number(latitude,'f',4);
+                    QString latStr = QString::number(latitude,'f',7);
                     qreal latitudeAbs = fabs(latStr.toFloat());
                     double latitudeAbsDeg =  floor(latitudeAbs);
                     QString latitudeDegStr = QString("%1").arg(latitudeAbsDeg);
@@ -4533,7 +4533,7 @@ void MainWindow::   handleResults()
                     else{
                         WE= 'W';
                     }
-                    QString lontStr = QString::number(longitude,'f',4);
+                    QString lontStr = QString::number(longitude,'f',7);
                     qreal longitudeAbs = fabs(lontStr.toFloat());
                     double longitudeAbsDeg =  floor(longitudeAbs);
                     QString longitudeDegStr = QString("%1").arg(longitudeAbsDeg);
