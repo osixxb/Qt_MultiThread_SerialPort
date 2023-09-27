@@ -34,6 +34,7 @@ QT_BEGIN_NAMESPACE
 #include <QDir>
 #include "xxwcustomplot.h"
 #include "xxwtracer.h"
+#include "configbaud.h"
 
 #define QEXTSERIALPORT
 //#define SERIALPORT
@@ -364,6 +365,8 @@ private slots:
 
     void on_pushButton_111_clicked();
 
+    void on_pushButton_14_clicked();
+
 private:
     Ui::MainWindow *ui;
     QByteArray result;
@@ -388,6 +391,7 @@ private:
     sysBaseGDialog *sysBaseGData;
     sysHeightDialog * sysHeightData;
     handleResultDelayDialog *handleResultDelayData;
+    configBaud *configBaudData;
     int datanum;
 
 

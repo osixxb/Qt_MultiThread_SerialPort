@@ -98,6 +98,9 @@ MainWindow::MainWindow(QWidget *parent)
     sysBaseGData = new sysBaseGDialog(this);
     sysBaseGData->setWindowFlags(flags);
 
+    configBaudData = new configBaud(this);
+    configBaudData->setWindowFlags(flags);
+
     handleResultDelayData = new handleResultDelayDialog(this);
     sysBaseGData->setWindowFlags(flags);
 
@@ -403,6 +406,10 @@ MainWindow::MainWindow(QWidget *parent)
     //系统基准重力值装订和日志打印
     connect(sysBaseGData, &sysBaseGDialog::sysBaseGDataCMD,this, &MainWindow::doDataSendWork);
     connect(sysBaseGData, &sysBaseGDialog::bookLogCMD,this, &MainWindow::bookLog);
+
+    //配置波特率和输出频率
+    connect(configBaudData, &configBaud::statesChangeCMD,this, &MainWindow::doDataSendWork);
+    connect(configBaudData, &configBaud::bookLogCMD,this, &MainWindow::bookLog);
 
     //串口接口装订
     connect(serialInterfaceData, &SerialInterfaceDialog::serialInterCMD,this, &MainWindow::doDataSendWork);
@@ -4075,7 +4082,9 @@ void MainWindow::InitSerialPortName()
     QStringList comList;//串口号
     comList<<"COM1"<<"COM2"<<"COM3"<<"COM4"<<"COM5"<<"COM6"
           <<"COM7"<<"COM8"<<"COM9"<<"COM10"<<"COM11"<<"COM12"
-         <<"COM13"<<"COM14"<<"COM15";
+         <<"COM13"<<"COM14"<<"COM15"<<"COM16"<<"COM17"<<"COM18"<<"COM19"<<"COM20"<<"COM21"
+        <<"COM22"<<"COM23"<<"COM24"<<"COM25"<<"COM26"<<"COM27"
+       <<"COM28"<<"COM29"<<"COM30"<<"COM31"<<"COM32"<<"COM33"<<"COM34"<<"COM35"<<"COM36";
     //通过QSerialPortInfo查找可用串口
      ui->box_portName->addItems(comList);
 }
@@ -22366,4 +22375,9 @@ void MainWindow::on_checkBox_174_toggled(bool checked)
 void MainWindow::on_pushButton_111_clicked()
 {
     resetY();
+}
+
+void MainWindow::on_pushButton_14_clicked()
+{
+    configBaudData->show();
 }

@@ -21,6 +21,7 @@ SOURCES += \
     bookoridatadialog.cpp \
     calibratparadialog.cpp \
     common.cpp \
+    configbaud.cpp \
     handleresultdelaydialog.cpp \
     leverarmdialog.cpp \
     main.cpp \
@@ -43,6 +44,7 @@ HEADERS += \
     bookoridatadialog.h \
     calibratparadialog.h \
     common.h \
+    configbaud.h \
     handleresultdelaydialog.h \
     leverarmdialog.h \
     mainwindow.h \
@@ -64,6 +66,7 @@ FORMS += \
     attitudedialog.ui \
     bookoridatadialog.ui \
     calibratparadialog.ui \
+    configbaud.ui \
     handleresultdelaydialog.ui \
     leverarmdialog.ui \
     mainwindow.ui \

@@ -197,6 +197,12 @@
        </size>
       </property>
       <layout class="QGridLayout" name="gridLayout_7">
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
        <item row="0" column="0">
         <widget class="QGroupBox" name="groupBox_2">
          <property name="font">
@@ -722,7 +728,7 @@
           <string notr="true">background-color: rgb(240, 240, 240);</string>
          </property>
          <property name="currentIndex">
-          <number>0</number>
+          <number>1</number>
          </property>
          <widget class="QWidget" name="tab_11">
           <attribute name="title">
@@ -938,6 +944,29 @@
              </property>
              <property name="checked">
               <bool>false</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QPushButton" name="pushButton_14">
+             <property name="enabled">
+              <bool>true</bool>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>0</width>
+               <height>22</height>
+              </size>
+             </property>
+             <property name="font">
+              <font>
+               <family>微软雅黑</family>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>配置波特率/输出频率</string>
              </property>
             </widget>
            </item>

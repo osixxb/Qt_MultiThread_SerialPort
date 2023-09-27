@@ -3,6 +3,7 @@ INPUT(
 ./release\bookoridatadialog.o
 ./release\calibratparadialog.o
 ./release\common.o
+./release\configbaud.o
 ./release\handleresultdelaydialog.o
 ./release\leverarmdialog.o
 ./release\main.o
@@ -23,6 +24,7 @@ INPUT(
 ./release\moc_attitudedialog.o
 ./release\moc_bookoridatadialog.o
 ./release\moc_calibratparadialog.o
+./release\moc_configbaud.o
 ./release\moc_handleresultdelaydialog.o
 ./release\moc_leverarmdialog.o
 ./release\moc_mainwindow.o
