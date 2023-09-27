@@ -471,6 +471,11 @@
             <string>DVL标度</string>
            </property>
           </item>
+          <item>
+           <property name="text">
+            <string>波特率和输出频率</string>
+           </property>
+          </item>
          </widget>
         </item>
        </layout>

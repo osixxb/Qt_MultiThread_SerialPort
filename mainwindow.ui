@@ -728,7 +728,7 @@
           <string notr="true">background-color: rgb(240, 240, 240);</string>
          </property>
          <property name="currentIndex">
-          <number>1</number>
+          <number>0</number>
          </property>
          <widget class="QWidget" name="tab_11">
           <attribute name="title">
@@ -3513,7 +3513,7 @@
         <item row="0" column="0" rowspan="2">
          <widget class="QTabWidget" name="tabWidget_2">
           <property name="currentIndex">
-           <number>0</number>
+           <number>3</number>
           </property>
           <widget class="QWidget" name="tab_2">
            <attribute name="title">
@@ -3870,6 +3870,16 @@
              <column>
               <property name="text">
                <string>基准重力</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>波特率</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>输出频率</string>
               </property>
              </column>
             </widget>

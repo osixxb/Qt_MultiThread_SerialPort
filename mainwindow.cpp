@@ -6883,6 +6883,177 @@ void MainWindow::   handleResults()
             }
         }
 
+        /********************************************************波特率/输出频率信息*******************************************************************/
+        else if(bufferStr[0] == 'e' && bufferStr[1] == 'b'&&bufferStr[2] == '9' && bufferStr[3] == '0'&&bufferStr[4] == 'c' && bufferStr[5] == 'b')
+        {
+            QString bufferStrCA = bufferStr;
+            if(bufferStrCA.size() != 12)
+            {
+                continue;
+            }
+            int CAcheckNumInt = 0;
+            QString CAcheckNumStr;
+            for(int i= 4;i<10;i=i+2)
+            {
+                CAcheckNumInt = CAcheckNumInt + bufferStrCA.mid(i,2).toInt(nullptr,16);
+            }
+            CAcheckNumStr = QString::number(CAcheckNumInt,16).right(2);
+            if(CAcheckNumStr == bufferStrCA.mid(10,2))
+            {
+                /***************************************波特率***********************************************/
+                bufferStrCA.remove(0,6);
+                QString DVLXStr = bufferStrCA.left(2).mid(0,2);
+                if(DVLXStr=="01")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("2400"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="02")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("3600"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="03")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("4800"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="04")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("7200"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="05")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("9600"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="06")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("14400"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="07")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("19200"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="08")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("28800"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="09")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("38400"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="0a")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("57600"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="0b")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("115200"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="0c")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("230400"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="0d")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("460800"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="0e")
+                {
+                    ui->tableWidget_9->setItem(0,2,new QTableWidgetItem("921600"));
+                    ui->tableWidget_9->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+
+                /***************************************输出频率数据***********************************************/
+                bufferStrCA.remove(0,2);
+                DVLXStr = bufferStrCA.left(2).mid(0,2);
+                if(DVLXStr=="01")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("0.1Hz"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="02")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("0.5Hz"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="03")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("1Hz"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="04")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("5Hz"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="05")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("10Hz"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="06")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("50Hz"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="07")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("100Hz"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="08")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("250Hz"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="09")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("500Hz"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="0a")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("1000Hz"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="0b")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("115200"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="0c")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("230400"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="0d")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("460800"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+                else if(DVLXStr=="0e")
+                {
+                    ui->tableWidget_9->setItem(0,3,new QTableWidgetItem("921600"));
+                    ui->tableWidget_9->item(0,3)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+                }
+
+            }
+        }
+
+
+
+
         /********************************************************初始位置信息数据格式01*******************************************************************/
         else if(bufferStr[0] == 'e' && bufferStr[1] == 'b'&&bufferStr[2] == '9' && bufferStr[3] == '0'&&bufferStr[4] == '0' && bufferStr[5] == '1')
         {
@@ -8188,7 +8359,7 @@ void MainWindow::   handleResults()
             ui->tableWidget_11->item(0,2)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
         }
 
-    }
+      }
     /******************************************调试信息，打印报文*******************************************/
     if(ui->action->isChecked() == true)
     {

@@ -387,6 +387,10 @@ void QueryDialog::on_pushButton_5_clicked()
     {
          data = QByteArray::fromHex("EB900FAAB36C");
     }
+    else if(ui->comboBox_5->currentText() == "波特率和输出频率")
+    {
+         data = QByteArray::fromHex("EB900FAAB46D");
+    }
     //输入日志
     // 获取当前时间字符串
     QDateTime current_date_time =QDateTime::currentDateTime();
