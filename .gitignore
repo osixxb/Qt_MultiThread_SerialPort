@@ -1,5 +1,74 @@
+############################################
+# Qt / C++ / MinGW / Windows .gitignore
+############################################
+
+# ===== Qt Creator =====
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qmlproject.user
+*.qtc_clangd
+*.creator
+*.creator.user
+
+# ===== Build directories =====
+build-*/
+*/build-*/
+build/
 debug/
 release/
-ui_*.h
-history/
 curve/
+history/
+# ===== CMake =====
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# ===== Compiled files =====
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.lib
+
+# ===== Qt generated =====
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+
+# ===== Qt Creator autosave =====
+*.autosave
+
+# ===== Logs =====
+*.log
+*.tmp
+*.bak
+
+# ===== VS / MinGW / MSYS =====
+.vscode/
+*.suo
+*.user
+*.user.*
+*.aps
+*.pch
+*.ipch
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Python cache (if any tools) =====
+__pycache__/
+*.pyc
+
+# ===== Test output =====
+*.out
+
+############################################
+# End of file
+############################################
