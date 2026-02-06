@@ -10,7 +10,7 @@
 *.qtc_clangd
 *.creator
 *.creator.user
-
+*日志*
 # ===== Build directories =====
 build-*/
 */build-*/
