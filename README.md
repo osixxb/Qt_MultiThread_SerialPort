@@ -1,37 +1,34 @@
 # Qt_MultiThread_SerialPort
 
-#### 介绍
-惯导调试上位机
+## 📌 项目简介
 
-#### 软件架构
-软件架构说明
+这是一个基于 **Qt（C++）** 的多线程串口通信示例工程，  
+用于演示和实现 **串口数据接收 / 解析 / 处理 / UI 显示** 的完整流程。
 
+项目采用 **多线程模型**，将串口通信与界面逻辑解耦，  
+适用于工业设备、仪表、控制系统等场景。
 
-#### 安装教程
+---
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+## ✨ 功能特性
 
-#### 使用说明
+- ✅ 串口参数可配置（端口号 / 波特率 / 校验位等）
+- ✅ 独立串口通信线程，避免阻塞 UI
+- ✅ 支持连续数据流接收
+- ✅ 支持历史数据记录与曲线扩展
+- ✅ 工程结构清晰，便于二次开发
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+---
 
-#### 参与贡献
+## 🧱 工程结构说明
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
-
-
-#### 特技
-
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+```text
+Qt_MultiThread_SerialPort/
+├── src/                # 核心源码（cpp / h）
+├── ui/                 # Qt Designer UI 文件
+├── curve/              # 运行时曲线 / 数据输出（不进 Git）
+├── history/            # 历史数据 / 日志（不进 Git）
+├── Qt_MultiThread_SerialPort.pro
+├── README.md
+├── .gitignore
+```
