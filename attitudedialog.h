@@ -2,7 +2,7 @@
 #define ATTITUDEDIALOG_H
 
 #include <QDialog>
-
+#include <QTranslator>
 namespace Ui {
 class AttitudeDialog;
 }
@@ -15,6 +15,9 @@ public:
     explicit AttitudeDialog(QWidget *parent = nullptr);
     ~AttitudeDialog();
 
+public slots:
+    void setZhLan();
+    void setEnLan();
 private slots:
     void on_pushButton_3_clicked();
 

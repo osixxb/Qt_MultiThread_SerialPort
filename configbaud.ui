@@ -26,7 +26,55 @@
       <string>配置波特率/输出频率</string>
      </property>
      <layout class="QGridLayout" name="gridLayout_2">
-      <item row="0" column="1">
+      <item row="3" column="0">
+       <widget class="QLabel" name="label_2">
+        <property name="maximumSize">
+         <size>
+          <width>90</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>输出频率：</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="label">
+        <property name="maximumSize">
+         <size>
+          <width>90</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>波特率：</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="QLabel" name="label_3">
+        <property name="maximumSize">
+         <size>
+          <width>90</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>串口号：</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
        <widget class="QComboBox" name="comboBox">
         <item>
          <property name="text">
@@ -100,33 +148,96 @@
         </item>
        </widget>
       </item>
-      <item row="0" column="0">
-       <widget class="QLabel" name="label">
-        <property name="maximumSize">
-         <size>
-          <width>90</width>
-          <height>16777215</height>
-         </size>
-        </property>
-        <property name="text">
-         <string>波特率：</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-        </property>
+      <item row="0" column="1">
+       <widget class="QComboBox" name="comboBox_3">
+        <item>
+         <property name="text">
+          <string>COM1</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>COM2</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>COM3</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>COM4</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>COM5</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>COM6</string>
+         </property>
+        </item>
        </widget>
       </item>
-      <item row="2" column="1">
+      <item row="3" column="1">
        <widget class="QComboBox" name="comboBox_2">
         <item>
          <property name="text">
           <string>0.1Hz</string>
          </property>
         </item>
+        <item>
+         <property name="text">
+          <string>0.5Hz</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>1Hz</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>5Hz</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>10Hz</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>50Hz</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>100Hz</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>250Hz</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>500Hz</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>1000Hz</string>
+         </property>
+        </item>
        </widget>
       </item>
-      <item row="2" column="0">
-       <widget class="QLabel" name="label_2">
+      <item row="4" column="0">
+       <widget class="QLabel" name="label_4">
         <property name="maximumSize">
          <size>
           <width>90</width>
@@ -134,11 +245,25 @@
          </size>
         </property>
         <property name="text">
-         <string>输出频率：</string>
+         <string>接收/发送：</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
         </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="QComboBox" name="comboBox_4">
+        <item>
+         <property name="text">
+          <string>发送</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>接收</string>
+         </property>
+        </item>
        </widget>
       </item>
      </layout>

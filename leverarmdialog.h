@@ -2,7 +2,7 @@
 #define LEVERARMDIALOG_H
 
 #include <QDialog>
-
+#include <QTranslator>
 namespace Ui {
 class LeverArmDialog;
 }
@@ -15,6 +15,9 @@ public:
     explicit LeverArmDialog(QWidget *parent = nullptr);
     ~LeverArmDialog();
 
+public slots:
+    void setEnLan();
+    void setZhLan();
 private slots:
     void on_pushButton_clicked();
     void on_pushButton_2_clicked();

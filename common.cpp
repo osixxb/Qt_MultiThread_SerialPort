@@ -1,7 +1,7 @@
 #include "common.h"
 #include <QByteArray>
 #include <QDebug>
-
+bool isEng= false;
 QByteArray HexStringToByteArray(QString HexString)
 {
     bool ok;

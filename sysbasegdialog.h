@@ -2,7 +2,7 @@
 #define SYSBASEGDIALOG_H
 
 #include <QDialog>
-
+#include <QTranslator>
 namespace Ui {
 class sysBaseGDialog;
 }
@@ -14,6 +14,9 @@ class sysBaseGDialog : public QDialog
 public:
     explicit sysBaseGDialog(QWidget *parent = nullptr);
     ~sysBaseGDialog();
+public slots:
+    void setEnLan();
+    void setZhLan();
 signals:
     void sysBaseGDataCMD(const QByteArray result);
     void bookLogCMD(QString bookDataStr);

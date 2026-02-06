@@ -2,7 +2,7 @@
 #define SERIALINTERFACEDIALOG_H
 
 #include <QDialog>
-
+#include <QTranslator>
 namespace Ui {
 class SerialInterfaceDialog;
 }
@@ -15,6 +15,9 @@ public:
     explicit SerialInterfaceDialog(QWidget *parent = nullptr);
     ~SerialInterfaceDialog();
 
+public slots:
+    void setZhLan();
+    void setEnLan();
 private slots:
     void on_pushButton_2_clicked();
 

@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QSerialPort>
 #include "qextserialport.h"
-
+#include <QTranslator>
 struct SnavMessage
 {
 

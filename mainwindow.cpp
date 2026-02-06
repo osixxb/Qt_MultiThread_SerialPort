@@ -10,6 +10,8 @@ int hasDataVaildC1;
 int hasDataVaildC2;
 int hasDataVaildC3;
 int hasDataVaildC8;
+int hasDataVaildCC;
+int hasDataVaildAA;
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -34,8 +36,23 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
     this->setLED1(ui->label_69,1,15);
+    trans = new QTranslator(this);
+    ui->actionChinese->setChecked(true);
+    QActionGroup *langGroup = new QActionGroup(this);
+    langGroup->addAction(ui->actionChinese);
+    langGroup->addAction(ui->actionEnglish);
+    langGroup->setExclusive(true); // 确保互斥，点一个另一个自动弹起
 
-    this->setWindowTitle("惯导调试上位机v3.2.3");
+    // 使所有列的宽度平铺（等宽分配）
+//    int totalWidth = ui->tableWidget_12->viewport()->width();
+//    int columnCount = ui->tableWidget_12->columnCount();
+//    int columnWidth = totalWidth / columnCount;
+
+//    for (int i = 0; i < columnCount; ++i) {
+//        ui->tableWidget_12->setColumnWidth(i, columnWidth);
+//    }
+    ui->retranslateUi(this);
+    this->setWindowTitle("惯导调试上位机v3.2.16");
     ui->comboBox->setVisible(true);
     ui->comboBox_2->setVisible(false);
 
@@ -49,7 +66,7 @@ MainWindow::MainWindow(QWidget *parent)
         bool res = dir.mkpath("./curve");
         if(!res)
         {
-            QMessageBox::warning(NULL, "提示", "创建曲线文件夹失败！");
+            QMessageBox::warning(NULL, tr("提示"), tr("创建曲线文件夹失败！"));
         }
     }
 
@@ -60,11 +77,11 @@ MainWindow::MainWindow(QWidget *parent)
         bool res = dir2.mkpath("./history");
         if(!res)
         {
-            QMessageBox::warning(NULL, "提示", "创建历史数据文件夹失败！");
+            QMessageBox::warning(NULL, tr("提示"), tr("创建历史数据文件夹失败！"));
             return;
         }
     }
-
+    this->showMaximized();
     paraQuery = new QueryDialog(this);              //状态切换
     Qt::WindowFlags flags = Qt::Dialog;
     flags |= Qt::WindowCloseButtonHint;
@@ -104,10 +121,19 @@ MainWindow::MainWindow(QWidget *parent)
     handleResultDelayData = new handleResultDelayDialog(this);
     sysBaseGData->setWindowFlags(flags);
 
+    voltageData = new VoltageDialog(this);
+    voltageData->setWindowFlags(flags);
+
     //this->resize(QSize(1195,720));
     qtime = new QTimer(this);
     qtime->setInterval(50);
 
+    qtimeQueryZero = new QTimer(this);
+    qtimeQueryZero->setInterval(3000);
+    fisrstQuery = 1;
+    fHeadingZero = 0;
+    fRollZero  = 0;
+    fPitchZero = 0;
 
     qDrawTime = new QTimer(this);
     qDrawTime->setInterval(drawDataPeri);
@@ -136,14 +162,23 @@ MainWindow::MainWindow(QWidget *parent)
         ui->tableWidget_7->verticalHeader()->setDefaultSectionSize(24);
         ui->tableWidget_7->horizontalHeader()->setDefaultSectionSize(140);
 
+        ui->tableWidget_12->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        ui->tableWidget_13->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        ui->tableWidget_14->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
         ui->tableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         ui->tableWidget_2->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-        ui->tableWidget_3->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-        ui->tableWidget_4->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-        ui->tableWidget_6->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        ui->tableWidget_12->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        ui->tableWidget_13->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        ui->tableWidget_14->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+         ui->tableWidget_3->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+         ui->tableWidget_4->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+         ui->tableWidget_5->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+         ui->tableWidget_6->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         ui->tableWidget_7->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         ui->tableWidget_8->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         ui->tableWidget_9->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+        ui->tableWidget_10->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
         ui->checkBox->setStyleSheet("QCheckBox{color:rgb(255,0,0)}");
         ui->checkBox_2->setStyleSheet("QCheckBox{color:rgb(128,0,255)}");
@@ -371,7 +406,8 @@ MainWindow::MainWindow(QWidget *parent)
 
 
     // 姿态零位装订和日志打印
-    connect(attitudeData, &AttitudeDialog::attitudeDataCMD,this, &MainWindow::doDataSendWork);
+    //connect(attitudeData, &AttitudeDialog::attitudeDataCMD,this, &MainWindow::doDataSendWork);
+    connect(attitudeData, &AttitudeDialog::attitudeDataCMD,this, &MainWindow::onattitudeDataCMD);
     connect(attitudeData, &AttitudeDialog::bookLogCMD,this, &MainWindow::bookLog);
 
     // 舰艇参数装订和日志打印
@@ -413,129 +449,35 @@ MainWindow::MainWindow(QWidget *parent)
 
     //串口接口装订
     connect(serialInterfaceData, &SerialInterfaceDialog::serialInterCMD,this, &MainWindow::doDataSendWork);
+    connect(voltageData, &VoltageDialog::statesChangeCMD,this, &MainWindow::doDataSendWork);
 
 
     //读取数据(采用定时器读取数据，不采用事件，方便移植到linux)
     connect(qtime,SIGNAL(timeout()),this,SLOT(handleResults()));
     connect(qDrawTime,SIGNAL(timeout()),this,SLOT(drawCurveLatitude()));   //每秒绘图
 
+    connect(qtimeQueryZero,SIGNAL(timeout()),this,SLOT(onqtimeQueryZero()));
+
     this->setStyleSheet("QMainWindow{color:rgb(200,200,200)}");
     init_darw2();
+
 }
+void MainWindow::onqtimeQueryZero()
+{
+    QByteArray data;
 
-//void MainWindow::getCurveData()
-//{
-//    curveX.append(m_xLength);
-//    C1Vlatitude.append(latitude);
+    data = QByteArray::fromHex("EB900FAAAA63");
 
-//    C1VheadingAngle.append(headingAngle);
-//    C1Vlongitude.append(longitude);
-//    C1VrollAngle.append(rollAngle);
-//    C1VpitchAngle.append(pitchAngle);
-//    C1VnorthSpeed.append(northSpeed);
-//    C1VeastSpeed.append(eastSpeed);
+    // 发送数据
+    if(ui->btn_openPort->text()=="打开串口"||ui->btn_openPort->text()=="Open Serial")
+    {
+        return;
+    }
+    serial_1->write(data);
 
-//    C1VheadingAngularSpeed.append(headingAngularSpeed);
-//    C1VrollAngleSpeed.append(rollAngleSpeed);
-//    C1VpitchAngleSpeed.append(pitchAngleSpeed);
-
-//    C1Vheave.append(heave);
-//    C1VverticalVelocity.append(verticalVelocity);
-//    C1Vsway.append(sway);
-//    C1VtransverseVelocity.append(transverseVelocity);
-//    C1Vsurge.append(surge);
-//    C1VlongitudinalVelocity.append(longitudinalVelocity);
-
-
-//    C5VXGyroAngleIncreaseFloat.append(C5XGyroAngleIncreaseFloat);
-//    C5VYGyroAngleIncreaseFloat.append(C5YGyroAngleIncreaseFloat);
-//    C5VZGyroAngleIncreaseFloat.append(C5ZGyroAngleIncreaseFloat);
-
-//    C5VXAccelerometerSpeedIncrementFloat.append(C5XAccelerometerSpeedIncrementFloat);
-//    C5VYAccelerometerSpeedIncrementFloat.append(C5YAccelerometerSpeedIncrementFloat);
-//    C5VZAccelerometerSpeedIncrementFloat.append(C5ZAccelerometerSpeedIncrementFloat);
-
-//    C5VXgyroCompensatedAngleIncrementFloat.append(C5XgyroCompensatedAngleIncrementFloat);
-//    C5VYgyroCompensatedAngleIncrementFloat.append(C5YgyroCompensatedAngleIncrementFloat);
-//    C5VZgyroCompensatedAngleIncrementFloat.append(C5ZgyroCompensatedAngleIncrementFloat);
-
-//    C5VXAccVelocityIncrementFloat.append(C5XAccVelocityIncrementFloat);
-//    C5VYAccVelocityIncrementFloat.append(C5YAccVelocityIncrementFloat);
-//    C5VZAccVelocityIncrementFloat.append(C5ZAccVelocityIncrementFloat);
-
-//    C5VXgyroDifFrequency.append(C5XgyroDifFrequency);
-//    C5VYgyroDifFrequency.append(C5YgyroDifFrequency);
-//    C5VZgyroDifFrequency.append(C5ZgyroDifFrequency);
-
-//    C5VXaccelerometerDifFre.append(C5XaccelerometerDifFre);
-//    C5VYaccelerometerDifFre.append(C5YaccelerometerDifFre);
-//    C5VZaccelerometerDifFre.append(C5ZaccelerometerDifFre);
-
-
-//    C5VXgyroTemp1.append(C5XgyroTemp1);
-//    C5VYgyroTemp1.append(C5YgyroTemp1);
-//    C5VZgyroTemp1.append(C5ZgyroTemp1);
-
-//    C5VXAccelerometerTemperture.append(C5XAccelerometerTemperture);
-//    C5VYAccelerometerTemperture.append(C5YAccelerometerTemperture);
-//    C5VZAccelerometerTemperture.append(C5ZAccelerometerTemperture);
-
-//    C5VXgyroTemp2.append(C5XgyroTemp2);
-//    C5VYgyroTemp2.append(C5YgyroTemp2);
-//    C5VZgyroTemp2.append(C5ZgyroTemp2);
-
-//    C5VXgyroAmplitudeJitter.append(C5XgyroAmplitudeJitter);
-//    C5VYgyroAmplitudeJitter.append(C5YgyroAmplitudeJitter);
-//    C5VZgyroAmplitudeJitter.append(C5ZgyroAmplitudeJitter);
-
-//    C5VXgyroAmpl1itudeFre.append(C5XgyroAmpl1itudeFre);
-//    C5VYgyroAmpl1itudeFre.append(C5YgyroAmpl1itudeFre);
-//    C5VZgyroAmpl1itudeFre.append(C5ZgyroAmpl1itudeFre);
-
-//    C3Vlongitude.append(C3longitude);
-//    C3VGPSlatitude.append(C3GPSlatitude);
-//    C3VtogetherSpeed.append(C3togetherSpeed);
-//    C3VheadingAngle.append(C3headingAngle);
-//    C3VcombinedEastSpeed.append(C3combinedEastSpeed);
-//    C3VcombinedNorthSpeed.append(C3combinedNorthSpeed);
-
-//    C3VwaterX.append(C3waterX);
-//    C3VwaterY.append(C3waterY);
-//    C3VbottomX.append(C3bottomX);
-//    C3VbottomY.append(C3bottomY);
-
-//    C3VelectromagnetismSpeed.append(C3electromagnetismSpeed);
-
-//    C6VC6UndampedRollAngleFloat.append(C6UndampedRollAngleFloat);
-//    C6VC6UndampedPitchAngleFloat.append(C6UndampedPitchAngleFloat);
-//    C6VC6UndampedHeadingAngularFloat.append(C6UndampedHeadingAngularFloat);
-//    C6VC6UndampedNorthSpeedFloat.append(C6UndampedNorthSpeedFloat);
-//    C6VC6UndampedEastSpeedFloat.append(C6UndampedEastSpeedFloat);
-//    C6VC6VerticalVelocityFloat.append(C6VerticalVelocityFloat);
-//    C6VC6UndampedLatFloat.append(C6UndampedLatFloat);
-//    C6VC6UndampedLongFloat.append(C6UndampedLongFloat);
-//    C6VC6UndampedHeightFloat.append(C6UndampedHeightFloat);
-
-
-//    C6VC6XGroyFloat.append(C6XGroyFloat);
-//    C6VC6YGroyFloat.append(C6YGroyFloat);
-//    C6VC6ZGroyFloat.append(C6ZGroyFloat);
-//    C6VC6XAccelerometerFloat.append(C6XAccelerometerFloat);
-//    C6VC6YAccelerometerFloat.append(C6YAccelerometerFloat);
-//    C6VC6ZAccelerometerFloat.append(C6ZAccelerometerFloat);
-
-
-
-
-//    VeastSpeedError.append(eastSpeedError);
-//    VnorthSpeedError.append(northSpeedError);
-//    VtogetherSpeedError.append(togetherSpeedError);
-//    VlatitudeError.append(latitudeError);
-//    VlongitudeError.append(longitudeError);
-//    VpositionError.append(positionError);
-
-//    m_xLength++;
-//}
+    if(qtimeQueryZero->isActive())
+        qtimeQueryZero->stop();
+}
 
 MainWindow::~MainWindow()
 {
@@ -4134,6 +4076,41 @@ void MainWindow::   handleResults()
     hasDataVaildC2++;
     hasDataVaildC3++;
     hasDataVaildC8++;
+    hasDataVaildCC++;
+    hasDataVaildAA++;
+    if(hasDataVaildAA > 60)
+    {
+        ui->lineEdit_69->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_72->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_71->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_73->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_76->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_75->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_74->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_77->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_78->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_79->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_84->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_87->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_83->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_88->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_89->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_86->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_81->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_90->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_85->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_82->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_95->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_98->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_94->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_99->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_100->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_97->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_92->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_101->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_96->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_93->setStyleSheet("color: rgb(0, 0, 0);");
+    }
     if(hasDataVaildC1 > 60)
     {
 
@@ -4161,6 +4138,11 @@ void MainWindow::   handleResults()
         ui->lineEdit_33	->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_34	->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_55 ->setStyleSheet("color: rgb(0, 0, 0);");
+
+        ui->lineEdit_57	->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_58	->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_59	->setStyleSheet("color: rgb(0, 0, 0);");
+
 
     }
     if(hasDataVaildC3> 60)
@@ -4190,7 +4172,9 @@ void MainWindow::   handleResults()
         ui->lineEdit_48 ->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_53 ->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_50 ->setStyleSheet("color: rgb(0, 0, 0);");
-        ui->label_53->setStyleSheet("font:bold;color:Red");
+        ui->lineEdit_56 ->setStyleSheet("color: rgb(0, 0, 0);");
+
+         ui->label_53->setStyleSheet("font:bold;color:Red");
         ui->label_17->setStyleSheet("font:bold;color:Red");
         ui->label_27->setStyleSheet("font:bold;color:Red");
         ui->label_28->setStyleSheet("font:bold;color:Red");
@@ -4209,6 +4193,20 @@ void MainWindow::   handleResults()
         ui->lineEdit_47 ->setStyleSheet("color: rgb(0, 0, 0);");
 
     }
+    if(hasDataVaildCC>60)
+    {
+        ui->lineEdit_60 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_61 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_62 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_63 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_64 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_65 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_66 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_67 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_68 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_70 ->setStyleSheet("color: rgb(0, 0, 0);");
+    }
+
     QDateTime current_date_time =QDateTime::currentDateTime();
     QString dateStr =current_date_time.toString("yyyy-MM-dd hh:mm:ss");
     QByteArray result;
@@ -4272,7 +4270,10 @@ void MainWindow::   handleResults()
                     ui->box_parityBit->setEnabled(false);
                     ui->box_stopBit->setEnabled(false);
 
-                    ui->btn_openPort->setText(QString("关闭串口"));
+                    if(isEng == 0)
+                        ui->btn_openPort->setText(QString("关闭串口"));
+                    else
+                        ui->btn_openPort->setText(QString("Close Serial"));
 
                     this->setLED1(ui->label_69,2,15);
                     serial_1->setTimeout(10);
@@ -4280,7 +4281,7 @@ void MainWindow::   handleResults()
                 }
                 else
                 {
-                    QMessageBox::about(NULL, "提示", "无法打开串口！");
+                    QMessageBox::about(NULL, tr("提示"), tr("无法打开串口！"));
                     return;
                 }
                 noVaildMessage = 0;
@@ -4339,10 +4340,10 @@ void MainWindow::   handleResults()
                 return;
             }
             QTextStream dataOutC1(&C1fileSave);
-            //QString headStr1 = "时间序号,标识号,系统时间,状态时间,纬度°,经度°,东速kn,北速kn,航向角°,横摇角°,纵摇角°,航向角速度°/s,横摇角速度°/s,纵摇角速度°/s,垂荡m,垂速m/s,横荡m,横速m/s,纵荡m,纵速m/s,导航信息有效位,系统状态,时码,参考纬度°,参考经度°,参考组合东速kn,参考组合北速kn,参考阻尼东速kn,参考阻尼北速kn,参考航向°,参考信息有效位";
+            //序号	包号	系统时间	状态时间	纬度	经度	东速	北速	航向	横摇	纵摇	航向角速度	横摇角速度	纵摇角速度	垂荡	垂速	横荡	横速	纵荡	纵速	导航信息有效位	系统状态	时码	参考纬度	参考经度	参考组合东速	参考组合北速	参考阻尼东速	参考阻尼北速	参考航向	参考信息有效位	北京时间
+
             //完整保存字符串
-            //QString headStr1 = "时间序号,标识号,系统时间,状态时间,纬度°,经度°,东速kn,北速kn,航向角°,横摇角°,纵摇角°,航向角速度°/s,横摇角速度°/s,纵摇角速度°/s,垂荡m,垂速m/s,横荡m,横速m/s,纵荡m,纵速m/s,时码有效,经纬度有效,东北速有效,航向有效,纵横摇有效,角速度有效,升沉有效,纵横荡有效,导航状态,工作位置,切换模式,时码,参考纬度°,参考经度°,参考组合东速kn,参考组合北速kn,参考阻尼东速kn,参考阻尼北速kn,参考航向°,参考经纬度,参考组合速度,参考阻尼,参考航向";
-            //dataOutC1<<headStr1.toUtf8();
+             //dataOutC1<<headStr1.toUtf8();
 
             C2fileSave.setFileName(C2HisDataName);
             if(!C2fileSave.open( QIODevice::ReadWrite | QIODevice::Append ))
@@ -4353,10 +4354,8 @@ void MainWindow::   handleResults()
                 return;
             }
             QTextStream dataOutC2(&C2fileSave);
-            //QString headStr2 = "时间序号,标识号,系统时间,信息传输标识,信息有效标识,故障码,GX陀螺常值漂移°/h,GY陀螺常值漂移°/h,GZ陀螺常值漂移°/h,AX加速度计零偏mg,AY加速度计零偏mg,AZ加速度计零偏mg";
-            //完整保存字符串
-            //QString headStr2 = "时间序号,标识号,系统时间,收到装订位置,收到GPS位置,收到装订速度,收到GPS速度,收到电磁计程仪速度,收到多普勒计程仪速度,收到时码,收到陀螺标定参数,收到加速度计标定参数,收到陀螺零偏温补系数,收到加速度计零位温补系数,收到装订航向,收到等效零偏,收到漂移补偿,收到状态切换命令,收到系统姿态零位,收到惯组和输出姿态零位,收到杆臂,收到显控参考信息,收到1PPS信号,收到录取同步信号,收到主惯导信息,收到系统编号,收到在舰位置,收到IP地址,装订位置有效,GPS位置有效,装订速度有效,GPS速度有效,电磁速度有效,多普勒对水有效,多普勒对底有效,时码有效,GX漂移估计补偿,GY漂移估计补偿,GZ漂移估计补偿,AX零偏估计补偿,AY零偏估计补偿,AZ零偏估计补偿,水平姿态误差估计补偿,航向误差估计补偿,速度误差估计补偿,位置误差估计补偿,直航状态,静止状态,锚泊状态,振动状态,冲击状态,主惯导位置有效,主惯导速度有效,主惯导姿态有效,主惯导角速度有效,陀螺故障,加速度计故障,IF板故障,采集板故障,通信板故障,接口板故障,解算异常故障,备用电源故障,GX陀螺常值漂移°/h,GY陀螺常值漂移°/h,GZ陀螺常值漂移°/h,AX加速度计零偏mg,AY加速度计零偏mg,AZ加速度计零偏mg";
-            //dataOutC2<<headStr2.toUtf8();
+            //序号	包号	系统时间	信息传输标识	信息有效标识	故障码	X陀螺常值漂移	Y陀螺常值漂移	Z陀螺常值漂移	X加速度计零偏	Y加速度计零偏	Z加速度计零偏
+
 
             C3fileSave.setFileName(C3HisDataName);
             if(!C3fileSave.open( QIODevice::ReadWrite | QIODevice::Append ))
@@ -4367,11 +4366,8 @@ void MainWindow::   handleResults()
                 return;
             }
             QTextStream dataOutC3(&C3fileSave);
-            // QString headStr3 = "时间序号,标识号,系统时间,信息收到标识,信息有效标识,GPS纬度°,GPS经度°,GPS合速kn,GPS航向°,GPS东速kn,GPS北速kn,电磁速度kn,多普勒对水横向速度kn,多普勒对水纵向速度kn,多普勒对底横向速度kn,多普勒对底纵向速度kn,时码：日月年,时码：天秒s,插值时间us,GPS卫星数,GPS水平精度因子";
+           //序号	包号	系统时间	信息收到标识	信息有效标识	GPS纬度	GPS经度	GPS合速	GPS航向	GPS东速	GPS北速	电磁速度	多普勒对水横向速度	多普勒对水纵向速度	多普勒对底横向速度	多普勒对底纵向速度	时码;年月日	时码:天秒	插值时间	GPS卫星数	GPS水平精度因子
 
-            //完整保存字符串
-            //QString headStr3 = "时间序号,标识号,系统时间,收到装订位置,收到GPS位置,收到装订速度,收到GPS速度,收到电磁计程仪速度,收到多普勒计程仪速度,收到时码,收到1PPS信号,装订位置有效,GPS位置有效,装订速度有效,GPS速度有效,电磁速度有效,多普勒对水有效,多普勒对底有效,时码有效,GPS纬度°,GPS经度°,GPS合速kn,GPS航向°,GPS东速kn,GPS北速kn,电磁速度kn,多普勒对水横向速度kn,多普勒对水纵向速度kn,多普勒对底横向速度kn,多普勒对底纵向速度kn,时码：日月年,时码：天秒s,插值时间us,GPS卫星数,GPS水平精度因子";
-            //dataOutC3<<headStr3.toUtf8();
 
             C5fileSave.setFileName(C5HisDataName);
             if(!C5fileSave.open( QIODevice::ReadWrite | QIODevice::Append ))
@@ -4382,10 +4378,8 @@ void MainWindow::   handleResults()
                 return;
             }
             QTextStream dataOutC5(&C5fileSave);
-            //QString headStr5 = "时间序号,标识号,系统时间,X陀螺1s角增量°/h,Y陀螺1s角增量°/h,Z陀螺1s角增量°/h,X加速度计1s速度增量m/s/s,Y加速度计1s速度增量m/s/s,Z加速度计1s速度增量m/s/s,X陀螺1s补偿后角增量°/h,Y陀螺1s补偿后角增量°/h,Z陀螺1s补偿后角增量°/h,X加速度计1s补偿后速度增量m/s/s,Y加速度计1s补偿后速度增量m/s/s,Z加速度计1s补偿后速度增量m/s/s,X陀螺差频p/s,Y陀螺差频p/s,Z陀螺差频p/s,X加速度计差频p/s,Y加速度计差频p/s,Z加速度计差频p/s,X陀螺抖幅p/s,Y陀螺抖幅p/s,Z陀螺抖幅p/s,X陀螺抖频Hz,Y陀螺抖频Hz,Z陀螺抖频Hz,X陀螺温度1°C,X陀螺温度2°C,Y陀螺温度1°C,Y陀螺温度2°C,Z陀螺温度1°C,Z陀螺温度2°C,IF板温度°C,X加速度计温度°C,Y加速度计温度°C,Z加速度计温度°C,采集板温度°C";
-            //完整保存字符串
-            //QString headStr5 = "时间序号,标识号,系统时间,X陀螺1s角增量°/h,Y陀螺1s角增量°/h,Z陀螺1s角增量°/h,X加速度计1s速度增量m/s/s,Y加速度计1s速度增量m/s/s,Z加速度计1s速度增量m/s/s,X陀螺1s补偿后角增量°/h,Y陀螺1s补偿后角增量°/h,Z陀螺1s补偿后角增量°/h,X加速度计1s补偿后速度增量m/s/s,Y加速度计1s补偿后速度增量m/s/s,Z加速度计1s补偿后速度增量m/s/s,X陀螺差频p/s,Y陀螺差频p/s,Z陀螺差频p/s,X加速度计差频p/s,Y加速度计差频p/s,Z加速度计差频p/s,X陀螺抖幅p/s,Y陀螺抖幅p/s,Z陀螺抖幅p/s,X陀螺抖频Hz,Y陀螺抖频Hz,Z陀螺抖频Hz,X陀螺温度1°C,X陀螺温度2°C,Y陀螺温度1°C,Y陀螺温度2°C,Z陀螺温度1°C,Z陀螺温度2°C,IF板温度°C,X加速度计温度°C,Y加速度计温度°C,Z加速度计温度°C,采集板温度°C";
-            //dataOutC5<<headStr5.toUtf8();
+           //序号	包号	系统时间	X陀螺1s角增量	Y陀螺1s角增量	z陀螺1s角增量	X加速度计1s速度增量	y加速度计1s速度增量	Z加速度计1s速度增量	x陀螺1s补偿后角增量	Y陀螺1s补偿后角增量	z陀螺1s补偿后角增量	x加速度计1s补偿后速度增量	Y加速度计1s补偿后速度增量	Z加速度计1s补偿后速度增量	X陀螺差频	Y陀螺差频	Z陀螺差频	X加速度计差频	Y加速度计差频	Z加速度计差	X陀螺抖幅	Y陀螺抖幅	Z陀螺抖幅	X陀螺抖频	Y陀螺抖频	Z陀螺抖频	X陀螺温度1	X陀螺温度2	Y陀螺温度1	Y陀螺温度2	Z陀螺温度1	Z陀螺温度2	IF板温度	X加速度计温度	Y加速度计温度	Z加速度计温度	采集表温度
+
 
             C6fileSave.setFileName(C6HisDataName);
             if(!C6fileSave.open( QIODevice::ReadWrite | QIODevice::Append ))
@@ -4396,6 +4390,7 @@ void MainWindow::   handleResults()
                 return;
             }
             QTextStream dataOutC6(&C6fileSave);
+            //序号	包号	无阻尼横摇角	无阻尼纵摇角	无阻尼航向角	无阻尼北速	无阻尼东速	无阻尼垂速	无阻尼纬度	无阻尼经度	无阻尼高度	X陀螺零偏	Y陀螺零偏	Z陀螺零偏	X加表零位	Y加表零位	Z加表零位
 
             C8fileSave.setFileName(C8HisDataName);
             if(!C8fileSave.open( QIODevice::ReadWrite | QIODevice::Append ))
@@ -4406,6 +4401,8 @@ void MainWindow::   handleResults()
                 return;
             }
             QTextStream dataOutC8(&C8fileSave);
+            //序号	包号	导航高度	导航天速	GPS高度	GPS天速	计程仪对地速度	计程仪对水速度	参考高度	参考天速
+
         }
 
 
@@ -4414,8 +4411,132 @@ void MainWindow::   handleResults()
     QString bufferStrOri = QString(result);
     QStringList startList = bufferStrOri.split("eb90");
     for(int ii = 0;ii<startList.size();ii++)
-    {
+    {        
         QString bufferStr = "eb90"+ startList[ii];
+        if(bufferStr.size()==258)
+        {
+            if(bufferStr[0] == 'e' && bufferStr[1] == 'b'&&bufferStr[254]=='a'&&bufferStr[256]=='a'&&bufferStr[256]=='a'&&bufferStr[257]=='a')
+            {
+                // 开始验证校验和
+                   QByteArray data = QByteArray::fromHex(bufferStr.toUtf8());
+
+                // 校验和验证
+                unsigned char checksum = static_cast<unsigned char>(data[126]);
+                unsigned char calculatedChecksum = 0;
+                for (int i = 2; i <= 125; ++i) {
+                    calculatedChecksum += static_cast<unsigned char>(data[i]);
+                }
+
+                if (calculatedChecksum != checksum) {
+                    qWarning() << "Checksum mismatch!";
+                    continue;
+                }
+
+                // 校验和正确，开始解析协议
+                unsigned int frameCount = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(data.constData() + 2));
+
+                // 解析 X陀螺相关数据
+                double xFilteredPulse = *reinterpret_cast<const double *>(data.constData() + 6);
+                double xTotalPulse = *reinterpret_cast<const double *>(data.constData() + 14);
+                quint16 xShakeFrequency = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 22));
+                quint32 xShakeAmplitude = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(data.constData() + 24));
+                quint16 xStableFrequencyVoltage = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 28));
+                float xLightIntensity = *reinterpret_cast<const float *>(data.constData() + 30);
+                float xSBSA_D = *reinterpret_cast<const float *>(data.constData() + 34);
+                quint16 xFeedbackPulseWidth = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 38));
+                quint16 xDriveDA = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 40));
+                float xShakeModulation = *reinterpret_cast<const float *>(data.constData() + 42);
+
+                ui->lineEdit_69->setText(QString::number(xFilteredPulse,'f',4));
+                ui->lineEdit_72->setText(QString::number(xTotalPulse,'f',4));
+                ui->lineEdit_71->setText(QString::number(xShakeFrequency,'f',0));
+                ui->lineEdit_73->setText(QString::number(xShakeAmplitude,'f',0));
+                ui->lineEdit_76->setText(QString::number(xStableFrequencyVoltage,'f',0));
+                ui->lineEdit_75->setText(QString::number(xLightIntensity,'f',4));
+                ui->lineEdit_74->setText(QString::number(xSBSA_D,'f',4));
+                ui->lineEdit_77->setText(QString::number(xFeedbackPulseWidth,'f',0));
+                ui->lineEdit_78->setText(QString::number(xDriveDA,'f',0));
+                ui->lineEdit_79->setText(QString::number(xShakeModulation,'f',4));
+
+
+                // 解析 Y陀螺相关数据
+                double yFilteredPulse = *reinterpret_cast<const double *>(data.constData() + 46);
+                double yTotalPulse = *reinterpret_cast<const double *>(data.constData() + 54);
+                quint16 yShakeFrequency = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 62));
+                quint32 yShakeAmplitude = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(data.constData() + 64));
+                quint16 yStableFrequencyVoltage = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 68));
+                float yLightIntensity = *reinterpret_cast<const float *>(data.constData() + 70);
+                float ySBSA_D = *reinterpret_cast<const float *>(data.constData() + 74);
+                quint16 yFeedbackPulseWidth = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 78));
+                quint16 yDriveDA = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 80));
+                float yShakeModulation = *reinterpret_cast<const float *>(data.constData() + 82);
+
+                ui->lineEdit_84->setText(QString::number(yFilteredPulse,'f',4));
+                ui->lineEdit_87->setText(QString::number(yTotalPulse,'f',4));
+                ui->lineEdit_83->setText(QString::number(yShakeFrequency,'f',0));
+                ui->lineEdit_88->setText(QString::number(yShakeAmplitude,'f',0));
+                ui->lineEdit_89->setText(QString::number(yStableFrequencyVoltage,'f',0));
+                ui->lineEdit_86->setText(QString::number(yLightIntensity,'f',4));
+                ui->lineEdit_81->setText(QString::number(ySBSA_D,'f',4));
+                ui->lineEdit_90->setText(QString::number(yFeedbackPulseWidth,'f',0));
+                ui->lineEdit_85->setText(QString::number(yDriveDA,'f',0));
+                ui->lineEdit_82->setText(QString::number(yShakeModulation,'f',4));
+
+
+                // 解析 Z陀螺相关数据
+                double zFilteredPulse = *reinterpret_cast<const double *>(data.constData() + 86);
+                double zTotalPulse = *reinterpret_cast<const double *>(data.constData() + 94);
+                quint16  zShakeFrequency = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 102));
+                quint32 zShakeAmplitude = qFromLittleEndian<quint32>(reinterpret_cast<const uchar *>(data.constData() + 104));
+                quint16 zStableFrequencyVoltage = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 108));
+                float zLightIntensity = *reinterpret_cast<const float *>(data.constData() + 110);
+                float zSBSA_D = *reinterpret_cast<const float *>(data.constData() + 114);
+                quint16 zFeedbackPulseWidth = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 118));
+                quint16 zDriveDA = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + 120));
+                float zShakeModulation = *reinterpret_cast<const float *>(data.constData() + 122);
+                ui->lineEdit_95->setText(QString::number(zFilteredPulse,'f',4));
+                ui->lineEdit_98->setText(QString::number(zTotalPulse,'f',4));
+                ui->lineEdit_94->setText(QString::number(zShakeFrequency,'f',0));
+                ui->lineEdit_99->setText(QString::number(zShakeAmplitude,'f',0));
+                ui->lineEdit_100->setText(QString::number(zStableFrequencyVoltage,'f',0));
+                ui->lineEdit_97->setText(QString::number(zLightIntensity,'f',4));
+                ui->lineEdit_92->setText(QString::number(zSBSA_D,'f',4));
+                ui->lineEdit_101->setText(QString::number(zFeedbackPulseWidth,'f',0));
+                ui->lineEdit_96->setText(QString::number(zDriveDA,'f',0));
+                ui->lineEdit_93->setText(QString::number(zShakeModulation,'f',4));
+                ui->lineEdit_69->setStyleSheet(" color:blue; " );
+                ui->lineEdit_72->setStyleSheet(" color:blue; " );
+                ui->lineEdit_71->setStyleSheet(" color:blue; " );
+                ui->lineEdit_73->setStyleSheet(" color:blue; " );
+                ui->lineEdit_76->setStyleSheet(" color:blue; " );
+                ui->lineEdit_75->setStyleSheet(" color:blue; " );
+                ui->lineEdit_74->setStyleSheet(" color:blue; " );
+                ui->lineEdit_77->setStyleSheet(" color:blue; " );
+                ui->lineEdit_78->setStyleSheet(" color:blue; " );
+                ui->lineEdit_79->setStyleSheet(" color:blue; " );
+                ui->lineEdit_84->setStyleSheet(" color:blue; " );
+                ui->lineEdit_87->setStyleSheet(" color:blue; " );
+                ui->lineEdit_83->setStyleSheet(" color:blue; " );
+                ui->lineEdit_88->setStyleSheet(" color:blue; " );
+                ui->lineEdit_89->setStyleSheet(" color:blue; " );
+                ui->lineEdit_86->setStyleSheet(" color:blue; " );
+                ui->lineEdit_81->setStyleSheet(" color:blue; " );
+                ui->lineEdit_90->setStyleSheet(" color:blue; " );
+                ui->lineEdit_85->setStyleSheet(" color:blue; " );
+                ui->lineEdit_82->setStyleSheet(" color:blue; " );
+                ui->lineEdit_95->setStyleSheet(" color:blue; " );
+                ui->lineEdit_98->setStyleSheet(" color:blue; " );
+                ui->lineEdit_94->setStyleSheet(" color:blue; " );
+                ui->lineEdit_99->setStyleSheet(" color:blue; " );
+                ui->lineEdit_100->setStyleSheet(" color:blue; " );
+                ui->lineEdit_97->setStyleSheet(" color:blue; " );
+                ui->lineEdit_92->setStyleSheet(" color:blue; " );
+                ui->lineEdit_101->setStyleSheet(" color:blue; " );
+                ui->lineEdit_96->setStyleSheet(" color:blue; " );
+                ui->lineEdit_93->setStyleSheet(" color:blue; " );
+                hasDataVaildAA = 0;
+            }
+        }
         /**********************************************解析导航信息C1******************************************************************/
         if(bufferStr[0] == 'e' && bufferStr[1] == 'b'&&bufferStr[2] == '9' && bufferStr[3] == '0'&&bufferStr[4] == 'c' && bufferStr[5] == '1')
         {
@@ -4434,6 +4555,11 @@ void MainWindow::   handleResults()
 
             if(C1checkNumStr == bufferStr.mid(182,2))
             {
+                if(fisrstQuery)
+                {
+                    qtimeQueryZero->start();
+                    fisrstQuery = 0;
+                }
                 /****************************************解析导航信息有效位**********************************************/
                 QString bufferStrC1Vaild = QString(bufferStr);
                 QString bufferStrC1 = QString(bufferStr);
@@ -4599,6 +4725,7 @@ void MainWindow::   handleResults()
                 bufferStrC1.remove(0,8);
                 QString headingAngleStrDis;
                 QString headingAngleStrDis_D;
+                QString headingAngleStrDis_D2;
                 if(headingVaild == "1")
                 {
                     QString headingStr;
@@ -4632,19 +4759,37 @@ void MainWindow::   handleResults()
 //                        headingAngleMinStr = QString::number(headingAngleMin,'f',3);
 //                        headingAngleStrDis = "-"+headingAngleAbsStr+"°"+headingAngleMinStr+"′";
 //                        headingAngleStrDis_D =  QString::number(headingAngle,'f',4);
-//                    }
-
+                        //                    }
+                        qreal heandingbuff = headingAngle+fHeadingZero;
+                        if(heandingbuff>=360.0)
+                        {
+                            heandingbuff = heandingbuff - 360.0;
+                        }
+                        QString headingStr2 = QString::number(heandingbuff,'f',4);
+                        double headingAngleAbsDeg2 =  floor(headingStr2.toFloat());
+                        QString headingAngleAbsStr2 = QString("%1").arg(headingAngleAbsDeg2);
+                        double headingAngleMin2  =  (heandingbuff - headingAngleAbsDeg2)* 60.0;
+                        QString headingAngleMinStr2 = QString::number(headingAngleMin2,'f',3);
+                        QString headingAngleStrDis2 = headingAngleAbsStr2+"°"+headingAngleMinStr2+"′";
+                        headingAngleStrDis_D2 = headingStr;
 
                     if(isDegree == 0)
+                    {
                         ui->lineEdit_9->setText(headingAngleStrDis);
+                        ui->lineEdit_57->setText(headingAngleStrDis2);
+                    }
                     else
+                    {
                         ui->lineEdit_9->setText(headingStr+"°");
+                        ui->lineEdit_57->setText(QString::number((heandingbuff),'f',4)+"°");
+                    }
                 }
 
                 /****************************************解析横摇角31-34字节*********************************************/
                 bufferStrC1.remove(0,8);
                 QString rollAngleStrDis;
                 QString rollAngleStrDis_D;
+                QString rollAngleStrDis_D2;
                 if(verHorShakVaild == "1")
                 {
                     QString rollAngleStr = bufferStrC1.left(8).mid(6,2)+bufferStrC1.left(8).mid(4,2)+bufferStrC1.left(8).mid(2,2)+bufferStrC1.left(8).mid(0,2);
@@ -4664,10 +4809,30 @@ void MainWindow::   handleResults()
                         rollAngleStrDis = rollAngleAbsStr+"°"+rollAngleMinStr+"′";
                     }
 
+                    QString rollAngleStrDis2;
+                    QString rolStr2 = QString::number(rollAngle+fRollZero,'f',4);
+                    double rollAngleAbsDegTemp2 =fabs(rolStr2.toFloat());
+                    double rollAngleAbsDeg2 =  floor(rollAngleAbsDegTemp2);
+                    QString rollAngleAbsStr2 = QString("%1").arg(rollAngleAbsDeg2);
+                    double rollAngleMin2  =  (rollAngleAbsDegTemp2 - rollAngleAbsDeg2)* 60.0;
+                    QString rollAngleMinStr2 = QString::number(rollAngleMin2,'f',3);
+                    rollAngleStrDis_D2 = rolStr2;
+                    if((rollAngle-fRollZero) <0){
+                        rollAngleStrDis2 = "-" + rollAngleAbsStr2+"°"+rollAngleMinStr2+"′";
+                    }
+                    else{
+                        rollAngleStrDis2 = rollAngleAbsStr2+"°"+rollAngleMinStr2+"′";
+                    }
                     if(isDegree == 0)
+                    {
                         ui->lineEdit_10->setText(rollAngleStrDis);
+                        ui->lineEdit_58->setText(rollAngleStrDis2);
+                    }
                     else
+                    {
                         ui->lineEdit_10->setText(rolStr+"°");
+                        ui->lineEdit_58->setText(QString::number((rollAngle+fRollZero),'f',4)+"°");
+                    }
                 }
 
 
@@ -4675,6 +4840,7 @@ void MainWindow::   handleResults()
                 bufferStrC1.remove(0,8);
                 QString pitchAngleStrDis;
                 QString pitchAngleStrDis_D;
+                QString pitchAngleStrDis_D2;
                 if(verHorShakVaild == "1")
                 {
                     QString pitchAngleStr = bufferStrC1.left(8).mid(6,2)+bufferStrC1.left(8).mid(4,2)+bufferStrC1.left(8).mid(2,2)+bufferStrC1.left(8).mid(0,2);
@@ -4693,11 +4859,31 @@ void MainWindow::   handleResults()
                     else{
                         pitchAngleStrDis = pitchAngleAbsStr+"°"+pitchAngleMinStr+"′";
                     }
+                    QString pitchAngleStrDis2;
+                    QString pitchStr2 = QString::number((pitchAngle+fPitchZero),'f',4);
+                    double pitchAngleAbsDegTemp2 =fabs(pitchStr2.toFloat());
+                    double pitchAngleAbsDeg2 =  floor(pitchAngleAbsDegTemp2);
+                    QString pitchAngleAbsStr2 = QString("%1").arg(pitchAngleAbsDegTemp2);
+                    double pitchAngleMin2  =  (pitchAngleAbsDegTemp2 - pitchAngleAbsDeg2)* 60.0;
+                    QString pitchAngleMinStr2 = QString::number(pitchAngleMin2,'f',3);
+                    pitchAngleStrDis_D2 = pitchStr2;
+                    if((pitchAngle-fPitchZero) <0){
+                        pitchAngleStrDis2 = "-" + pitchAngleAbsStr2+"°"+pitchAngleMinStr2+"′";
+                    }
+                    else{
+                        pitchAngleStrDis2 = pitchAngleAbsStr2+"°"+pitchAngleMinStr2+"′";
+                    }
 
                     if(isDegree == 0)
+                    {
                         ui->lineEdit_11->setText(pitchAngleStrDis);
+                        ui->lineEdit_59->setText(pitchAngleStrDis2);
+                       }
                     else
+                    {
                         ui->lineEdit_11->setText(pitchStr+"°");
+                        ui->lineEdit_59->setText(QString::number((pitchAngle+fPitchZero),'f',4)+"°");
+                    }
                 }
 
 
@@ -4844,106 +5030,145 @@ void MainWindow::   handleResults()
                 quint8 sysState = quint8(bufferStrC1.left(2).toUInt(nullptr,16)) & 0x3F ;
                 if(sysState == 0) //准备
                 {
-                    ui->lineEdit_3->setText("准备") ;
+                    if (isEng == 0) ui->lineEdit_3->setText("准备");
+                        else ui->lineEdit_3->setText("Ready"); // 或 Preparation
                 }
                 else if(sysState == 1) //自对准/粗阶段0x01
                 {
-                    ui->lineEdit_3->setText("自对准/粗阶段");
+                    if (isEng == 0) ui->lineEdit_3->setText("自对准/粗阶段");
+                        else ui->lineEdit_3->setText("Self-Align/Coarse");
                 }
                 else if(sysState == 17) //自对准/精阶段0x11
                 {
-                    ui->lineEdit_3->setText("自对准/精阶段");
+                    if (isEng == 0) ui->lineEdit_3->setText("自对准/精阶段");
+                        else ui->lineEdit_3->setText("Self-Align/Fine");
                 }
                 else if(sysState == 2) //传递对准/粗阶段0x02
                 {
-                    ui->lineEdit_3->setText("传递对准/粗阶段");
+                    if (isEng == 0) ui->lineEdit_3->setText("传递对准/粗阶段");
+                        else ui->lineEdit_3->setText("Trans-Align/Coarse");
                 }
                 else if(sysState == 18) //传递对准/精阶段0x12
                 {
-                    ui->lineEdit_3->setText("传递对准/精阶段");
+                    if (isEng == 0) ui->lineEdit_3->setText("传递对准/精阶段");
+                        else ui->lineEdit_3->setText("Trans-Align/Fine");
                 }
                 else if(sysState == 3) //罗经对准/粗阶段0x3
                 {
-                    ui->lineEdit_3->setText("传递对准/粗阶段");
+                    if (isEng == 0) ui->lineEdit_3->setText("罗经对准/粗阶段");
+                        else ui->lineEdit_3->setText("Compass-Align/Coarse");
                 }
                 else if(sysState == 19) //罗经对准/方位阶段0x13
                 {
-                    ui->lineEdit_3->setText("罗经对准/方位阶段");
+                    if (isEng == 0) ui->lineEdit_3->setText("罗经对准/方位阶段");
+                        else ui->lineEdit_3->setText("Compass-Align/Azimuth");
                 }
                 else if(sysState == 4) //自主导航/无阻尼0x04
                 {
-                    ui->lineEdit_3->setText("自主导航/无阻尼");
+                    if (isEng == 0) ui->lineEdit_3->setText("自主导航/无阻尼");
+                        else ui->lineEdit_3->setText("Inertial Nav/Undamped");
                 }
                 else if(sysState == 20) //自主导航/水平阻尼0x14
                 {
-                    ui->lineEdit_3->setText("自主导航/水平阻尼");
+                    if (isEng == 0) ui->lineEdit_3->setText("自主导航/水平阻尼");
+                        else ui->lineEdit_3->setText("Inertial Nav/Horiz. Damped");
                 }
                 else if(sysState == 36) //自主导航/全阻尼0x24
                 {
-                    ui->lineEdit_3->setText("自主导航/全阻尼");
+                    if (isEng == 0) ui->lineEdit_3->setText("自主导航/全阻尼");
+                        else ui->lineEdit_3->setText("Inertial Nav/Fully Damped");
                 }
                 else if(sysState == 5) //罗经导航0x05
                 {
-                    ui->lineEdit_3->setText("罗经导航");
+                    if (isEng == 0) ui->lineEdit_3->setText("罗经导航");
+                        else ui->lineEdit_3->setText("Compass Navigation");
                 }
                 else if(sysState == 6) //组合导航/卫导x06
                 {
-                    ui->lineEdit_3->setText("组合导航/卫导");
+                    if (isEng == 0) ui->lineEdit_3->setText("组合导航/卫导");
+                        else ui->lineEdit_3->setText("Integrated Nav/GNSS");
                 }
                 else if(sysState == 22) //组合导航/多普勒0x16
                 {
-                    ui->lineEdit_3->setText("组合导航/多普勒");
+                    if (isEng == 0) ui->lineEdit_3->setText("组合导航/多普勒");
+                        else ui->lineEdit_3->setText("Integrated Nav/DVL");
                 }
                 else if(sysState == 38) //组合导航/天文0x26
                 {
-                    ui->lineEdit_3->setText("组合导航/天文");
+                    if (isEng == 0) ui->lineEdit_3->setText("组合导航/天文");
+                        else ui->lineEdit_3->setText("Integrated Nav/Celestial");
                 }
                 else if(sysState == 54) //组合导航/超短基线0x36
                 {
-                    ui->lineEdit_3->setText("组合导航/超短基线");
+                    if (isEng == 0) ui->lineEdit_3->setText("组合导航/超短基线");
+                        else ui->lineEdit_3->setText("Integrated Nav/USBL");
                 }
 
                 else if(sysState == 7) //在舰标定/粗对准0x07
                 {
-                    ui->lineEdit_3->setText("在舰标定/粗对准");
+                    if (isEng == 0) ui->lineEdit_3->setText("在舰标定/粗对准");
+                        else ui->lineEdit_3->setText("On-board Calib/Coarse");
                 }
                 else if(sysState == 23) //在舰标定/位置1 0x17
                 {
-                    ui->lineEdit_3->setText("在舰标定/位置1");
+                    if (isEng == 0) ui->lineEdit_3->setText("在舰标定/位置1");
+                        else ui->lineEdit_3->setText("On-board Calib/Pos 1");
                 }
                 else if(sysState == 39) //在舰标定/位置2 0x27
                 {
-                    ui->lineEdit_3->setText("在舰标定/位置2");
+                    if (isEng == 0) ui->lineEdit_3->setText("在舰标定/位置2");
+                        else ui->lineEdit_3->setText("On-board Calib/Pos 2");
                 }
                 else if(sysState == 8) //零速校准0x08
                 {
-                    ui->lineEdit_3->setText("零速校准");
+                    if (isEng == 0) ui->lineEdit_3->setText("零速校准");
+                        else ui->lineEdit_3->setText("ZUPT (Zero Velocity Calib)");
                 }
                 else if(sysState == 24) //点位置校准0x18
                 {
-                    ui->lineEdit_3->setText("点位置校准");
+                    if(isEng == 0)
+                            ui->lineEdit_3->setText("点位置校准");
+                        else
+                            ui->lineEdit_3->setText("Point Position Calibration");
                 }
                 else if(sysState == 40) //综合校准0x28
                 {
-                    ui->lineEdit_3->setText("综合校准");
+                    if (isEng == 0) ui->lineEdit_3->setText("综合校准");
+                        else ui->lineEdit_3->setText("Comprehensive Calibration");
                 }
 
                 /****************************************解析系统状态64字节*********************************************/
                 quint8 workPlace = quint8(bufferStrC1.left(2).toUInt(nullptr,16)) & 0x40;
-                if(workPlace == 0)
+                if(workPlace == 0) // 码头
                 {
-                    ui->lineEdit->setText("码头");
+                    if(isEng == 0)
+                        ui->lineEdit->setText("码头");
+                    else
+                        ui->lineEdit->setText("Pier"); // 或 Wharf / Dock
                 }
-                else
-                    ui->lineEdit->setText("海上");
+                else // 海上
+                {
+                    if(isEng == 0)
+                        ui->lineEdit->setText("海上");
+                    else
+                        ui->lineEdit->setText("At Sea"); // 或 On Sea
+                }
 
                 quint8 toggleMode = quint8(bufferStrC1.left(2).toUInt(nullptr,16)) & 0x80;
-                if(toggleMode == 0)
+                if(toggleMode == 0) // 自动
                 {
-                    ui->lineEdit_2->setText("自动");
+                    if(isEng == 0)
+                        ui->lineEdit_2->setText("自动");
+                    else
+                        ui->lineEdit_2->setText("Auto");
                 }
-                else
-                    ui->lineEdit_2->setText("手动");
+                else // 手动
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_2->setText("手动");
+                    else
+                        ui->lineEdit_2->setText("Manual");
+                }
 
                 /****************************************解析时码65-68字节，时码没有放在北京时间进行显示*********************************************/
                 bufferStrC1.remove(0,2);
@@ -5031,6 +5256,10 @@ void MainWindow::   handleResults()
 
                 ui->lineEdit_28->setText(combinedNorthSpeedStrDis);
 
+                qreal refTogetherSpeed = sqrt(qPow(combinedNorthSpeed,2) + qPow(combinedEastSpeed,2));
+                QString refTogetherSpeedStr = QString::number(refTogetherSpeed,'f',2)+"kn";
+
+                ui->lineEdit_56->setText(refTogetherSpeedStr);
 
                 /****************************************解析参考阻尼东速81-82字节*********************************************/
                 bufferStrC1.remove(0,4);
@@ -5078,141 +5307,161 @@ void MainWindow::   handleResults()
                 qint16 RefLatiLongi = qint16(RefLatiLongiStr.toUInt(nullptr,16)) &0x000F;
                 if(RefLatiLongi == 0)
                 {
-                    ui->lineEdit_31->setText("装订位置");
-//                    ui->lineEdit_24->setStyleSheet("color: rgb(0, 0, 0);");
-//                    ui->lineEdit_25->setStyleSheet("color: rgb(0, 0, 0);");
-//                    ui->lineEdit_48->setStyleSheet("color: rgb(0, 0, 0);");
+                    if(isEng == 0)
+                        ui->lineEdit_31->setText("装订位置");
+                    else
+                        ui->lineEdit_31->setText("Preset Position");
+
 
                 }
                 else if(RefLatiLongi == 1)
                 {
-                    ui->lineEdit_31->setText("GPS位置");
-//                    ui->lineEdit_24->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_25->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_48->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                        ui->lineEdit_31->setText("GPS位置");
+                    else
+                        ui->lineEdit_31->setText("GPS Position");
+
 
                 }
                 else if(RefLatiLongi == 2)
                 {
-                    ui->lineEdit_31->setText("主惯导位置");
-//                    ui->lineEdit_24->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_25->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_48->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                        ui->lineEdit_31->setText("主惯导位置");
+                    else
+                        ui->lineEdit_31->setText("Main Ins Position");
+
 
                 }
                 qint16 RefComspeed = (qint16(RefLatiLongiStr.toUInt(nullptr,16)) &0x00F0)>>4;
                 if(RefComspeed == 0)
                 {
-                    ui->lineEdit_32->setText("装订速度");
-//                    ui->lineEdit_28->setStyleSheet("color: rgb(0, 0, 0);");
-//                    ui->lineEdit_27->setStyleSheet("color: rgb(0, 0, 0);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 0);");
-                    }
+                    if(isEng == 0)
+                        ui->lineEdit_32->setText("装订速度");
+                    else
+                        ui->lineEdit_32->setText("Preset Velocity");
+
+                }
                 else if(RefComspeed == 1)
                 {
-                    ui->lineEdit_32->setText("GPS速度");
-//                    ui->lineEdit_27->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_28->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
-
+                    if(isEng == 0)
+                        ui->lineEdit_32->setText("GPS速度");
+                    else
+                        ui->lineEdit_32->setText("GPS Velocity");
                 }
                 else if(RefComspeed == 2)
                 {
-                    ui->lineEdit_32->setText("电磁速度");
-//                    ui->lineEdit_27->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_28->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
-
+                    if(isEng == 0)
+                        ui->lineEdit_32->setText("电磁速度");
+                    else
+                        ui->lineEdit_32->setText("EM Log Speed");
                 }
                 else if(RefComspeed == 3)
                 {
-                    ui->lineEdit_32->setText("多普勒对水速度");
-//                    ui->lineEdit_27->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_28->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                         ui->lineEdit_32->setText("多普勒对水速度");
+                    else
+                         ui->lineEdit_32->setText("DVL Water Speed");
+
 
                 }
                 else if(RefComspeed == 4)
                 {
-                    ui->lineEdit_32->setText("多普勒对底速度");
-//                    ui->lineEdit_27->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_28->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                         ui->lineEdit_32->setText("多普勒对底速度");
+                    else
+                         ui->lineEdit_32->setText("DVL Ground Speed");
+
 
                 }
                 else if(RefComspeed == 5)
                 {
-                    ui->lineEdit_32->setText("主惯导速度");
-//                    ui->lineEdit_27->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_28->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                          ui->lineEdit_32->setText("主惯导速度");
+                    else
+                          ui->lineEdit_32->setText("Main INS Velocity");
+
 
                 }
                 qint16 RefDamSpeed = (qint16(RefLatiLongiStr.toUInt(nullptr,16)) &0x0F00)>>8;
                 if(RefDamSpeed == 0)
                 {
-                    ui->lineEdit_33->setText("装订速度");
-//                    ui->lineEdit_29->setStyleSheet("color: rgb(0, 0, 0);");
-//                    ui->lineEdit_30->setStyleSheet("color: rgb(0, 0, 0);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 0);");
+                    if(isEng == 0)
+                          ui->lineEdit_33->setText("装订速度");
+                    else
+                         ui->lineEdit_33->setText("Preset Velocity");
+
 
                 }
                 else if(RefDamSpeed == 1)
                 {
-                    ui->lineEdit_33->setText("GPS速度");
-//                    ui->lineEdit_29->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_30->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                          ui->lineEdit_33->setText("GPS速度");
+                    else
+                         ui->lineEdit_33->setText("GPS Velocity");
+
 
                 }
                 else if(RefDamSpeed == 2)
                 {
-                    ui->lineEdit_33->setText("电磁速度");
-//                    ui->lineEdit_29->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_30->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                           ui->lineEdit_33->setText("电磁速度");
+                    else
+                          ui->lineEdit_33->setText("EM Log Speed");
+
 
                 }
                 else if(RefDamSpeed == 3)
                 {
-                    ui->lineEdit_33->setText("多普勒对水速度");
-//                    ui->lineEdit_29->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_30->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                           ui->lineEdit_33->setText("多普勒对水速度");
+                    else
+                         ui->lineEdit_33->setText("DVL Water Speed");
+
 
                 }
                 else if(RefDamSpeed == 4)
                 {
-                    ui->lineEdit_33->setText("多普勒对底速度");
-//                    ui->lineEdit_29->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_30->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                           ui->lineEdit_33->setText("多普勒对底速度");
+                    else
+                         ui->lineEdit_33->setText("DVL Ground Speed");
+
 
                 }
                 else if(RefDamSpeed == 5)
                 {
-                    ui->lineEdit_33->setText("主惯导速度");
-//                    ui->lineEdit_29->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_30->setStyleSheet("color: rgb(0, 0, 255);");
-//                    ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                           ui->lineEdit_33->setText("主惯导速度");
+                    else
+                        ui->lineEdit_33->setText("Main INS Velocity");
+
 
                 }
                 qint16 Referencehead = (qint16(RefLatiLongiStr.toUInt(nullptr,16)) &0xF000)>>12;
                 if(Referencehead == 0)
                 {
-                    ui->lineEdit_34->setText("装订航向");
-//                    ui->lineEdit_26->setStyleSheet("color: rgb(0, 0, 0);");
+                    if(isEng == 0)
+                           ui->lineEdit_34->setText("装订航向");
+                    else
+                        ui->lineEdit_34->setText("Preset Heading");
+
 
                      }
                 else if(Referencehead == 1)
                 {
-                    ui->lineEdit_34->setText("GPS航迹向");
-//                    ui->lineEdit_26->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                           ui->lineEdit_34->setText("GPS航迹向");
+                    else
+                        ui->lineEdit_34->setText("GPS Course Over Ground");
+
                     }
                 else if(Referencehead == 2)
                 {
-                    ui->lineEdit_34->setText("主惯导航向");
-//                    ui->lineEdit_26->setStyleSheet("color: rgb(0, 0, 255);");
+                    if(isEng == 0)
+                           ui->lineEdit_34->setText("主惯导航向");
+                    else
+                        ui->lineEdit_34->setText("Main INS Heading");
+
                     }
 
 
@@ -5234,7 +5483,10 @@ void MainWindow::   handleResults()
                 QString dataInvaildRecordStr =  QString::number(dataInvaildRecord,10);
                 QTextStream dataOutC1(&C1fileSave);
 
-                QString dataStr1 = dataInvaildRecordStr + ","+"1"+","+QString::number(sysTimeMs,10)+","+QString::number(stateMs,10)+","+latitudeStrDis_D+","+longitudeStrDis_D+","+eastSpeedStrDis_D+","+northSpeedStrDis_D+","+headingAngleStrDis_D+","+rollAngleStrDis_D+","+pitchAngleStrDis_D+","+headingAngularSpeedStrDis_D+","+rollAngleSpeedStrDis_D+","+pitchAngleSpeedStrDis_D+","+heaveStrDis_D+","+verticalVelocityStrDis_D+","+swayStrDis_D+","+transverseVelocityStrDis_D+","+surgeStrDis_D+","+longitudinalVelocityStrDis_D+","+QString::number(NavVaildBuff,10)+","+QString::number(sysStateBuff,10)+","+QString::number(timeFramesInt32,10)+","+refLatitudeStrDis_D+","+reflongitudeStrDis_D+","+combinedEastSpeedStrDis_D+","+combinedNorthSpeedStrDis_D+","+dampedEastSpeedStrDis_D+","+dampedNorthSpeedStrDis_D+","+reHeadingAngleStrDis_D+","+QString::number(RefLatiLongiBuff,10)+"\n";
+                QDateTime current_date_time =QDateTime::currentDateTime();
+                QString dateStr =current_date_time.toString("yyyy-MM-dd_hh:mm:ss");
+
+                QString dataStr1 = dataInvaildRecordStr + ","+"1"+","+QString::number(sysTimeMs,10)+","+QString::number(stateMs,10)+","+latitudeStrDis_D+","+longitudeStrDis_D+","+eastSpeedStrDis_D+","+northSpeedStrDis_D+","+headingAngleStrDis_D+","+rollAngleStrDis_D+","+pitchAngleStrDis_D+","+headingAngleStrDis_D2+","+rollAngleStrDis_D2+","+pitchAngleStrDis_D2+","+headingAngularSpeedStrDis_D+","+rollAngleSpeedStrDis_D+","+pitchAngleSpeedStrDis_D+","+heaveStrDis_D+","+verticalVelocityStrDis_D+","+swayStrDis_D+","+transverseVelocityStrDis_D+","+surgeStrDis_D+","+longitudinalVelocityStrDis_D+","+QString::number(NavVaildBuff,10)+","+QString::number(sysStateBuff,10)+","+QString::number(timeFramesInt32,10)+","+refLatitudeStrDis_D+","+reflongitudeStrDis_D+","+combinedEastSpeedStrDis_D+","+combinedNorthSpeedStrDis_D+","+dampedEastSpeedStrDis_D+","+dampedNorthSpeedStrDis_D+","+reHeadingAngleStrDis_D+","+QString::number(RefLatiLongiBuff,10)+","+dateStr+"\n";
                 // QString dataStr1 = "\n"+ dataInvaildRecordStr + ","+"C1"+","+sysTimeStr+","+stateTimeStr+","+latitudeStrDis_D+","+longitudeStrDis_D+","+eastSpeedStrDis_D+","+northSpeedStrDis_D+","+headingAngleStrDis_D+","+rollAngleStrDis_D+","+pitchAngleStrDis_D+","+headingAngularSpeedStrDis_D+","+rollAngleSpeedStrDis_D+","+pitchAngleSpeedStrDis_D+","+heaveStrDis_D+","+verticalVelocityStrDis_D+","+swayStrDis_D+","+transverseVelocityStrDis_D+","+surgeStrDis_D+","+longitudinalVelocityStrDis_D+","+timeFramesVaild+","+longitudeLatitudeVaild+","+northeastSpeed+","+headingVaild+","+verHorShakVaild+","+angulaVelocityVaild+","+heaveVaild+","+swayVaild+","+ui->lineEdit_3->text()+","+ui->lineEdit->text()+","+ui->lineEdit_2->text()+","+timeFramesInt32+","+refLatitudeStrDis_D+","+reflongitudeStrDis_D+","+combinedEastSpeedStrDis_D+","+combinedNorthSpeedStrDis_D+","+dampedEastSpeedStrDis_D+","+dampedNorthSpeedStrDis_D+","+reHeadingAngleStrDis_D+","+ui->lineEdit_31->text()+","+ui->lineEdit_32->text()+","+ui->lineEdit_33->text()+","+ui->lineEdit_34->text();
                 dataOutC1<<dataStr1.toUtf8();
 
@@ -5255,6 +5507,10 @@ void MainWindow::   handleResults()
                 ui->lineEdit_21->setStyleSheet( " color:blue; " );
                 ui->lineEdit_22->setStyleSheet( " color:blue; " );
                 ui->lineEdit_23->setStyleSheet( " color:blue; " );
+                ui->lineEdit_57->setStyleSheet( " color:blue; " );
+                ui->lineEdit_58->setStyleSheet( " color:blue; " );
+                ui->lineEdit_59->setStyleSheet( " color:blue; " );
+
                 C1getCurveData();
 
                 noVaildMessage = 0;
@@ -5688,6 +5944,7 @@ void MainWindow::   handleResults()
                     ui->lineEdit_26->setStyleSheet("color: rgb(0, 0, 255);");
                     ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 255);");
                     ui->lineEdit_27->setStyleSheet("color: rgb(0, 0, 255);");
+                    ui->lineEdit_56->setStyleSheet("color: rgb(0, 0, 255);");
                     ui->lineEdit_28->setStyleSheet("color: rgb(0, 0, 255);");
                     ui->lineEdit_29->setStyleSheet("color: rgb(0, 0, 255);");
                     ui->lineEdit_30->setStyleSheet("color: rgb(0, 0, 255);");
@@ -5703,6 +5960,7 @@ void MainWindow::   handleResults()
                     ui->lineEdit_26->setStyleSheet("color: rgb(0, 0, 0);");
                     ui->lineEdit_53->setStyleSheet("color: rgb(0, 0, 0);");
                     ui->lineEdit_27->setStyleSheet("color: rgb(0, 0, 0);");
+                    ui->lineEdit_56->setStyleSheet("color: rgb(0, 0, 0);");
                     ui->lineEdit_28->setStyleSheet("color: rgb(0, 0, 0);");
                     ui->lineEdit_29->setStyleSheet("color: rgb(0, 0, 0);");
                     ui->lineEdit_30->setStyleSheet("color: rgb(0, 0, 0);");
@@ -5844,7 +6102,7 @@ void MainWindow::   handleResults()
 
                 ui->lineEdit_38->setText(C3togetherSpeedStrDis);
 
-                /****************************************解析航向25-28字节*********************************************/
+                /****************************************解析GPS航向25-28字节*********************************************/
                 bufferStrC3.remove(0,4);
 
                 QString C3headingAngleStr = bufferStrC3.left(8).mid(6,2)+bufferStrC3.left(8).mid(4,2)+bufferStrC3.left(8).mid(2,2)+bufferStrC3.left(8).mid(0,2);
@@ -5875,7 +6133,7 @@ void MainWindow::   handleResults()
 
                 ui->lineEdit_40->setText(C3combinedEastSpeedStrDis);
 
-                /****************************************解析参考组合北速79-80字节*********************************************/
+                /****************************************解析GPS北速31-32字节*********************************************/
                 bufferStrC3.remove(0,4);
                 QString C3combinedNorthSpeedStr = bufferStrC3.left(4).mid(2,2)+bufferStrC3.left(4).mid(0,2);
                 qint16 C3combinedNorthSpeedInt16 = qint16(C3combinedNorthSpeedStr.toUInt(nullptr,16));
@@ -6608,7 +6866,7 @@ void MainWindow::   handleResults()
                 QString dataInvaildRecordStr =  QString::number(dataInvaildRecord,10);
                 QTextStream dataOutC6(&C6fileSave);
 
-                //无阻尼横摇角，无阻尼纵摇角，无阻尼航向角，无阻尼北速，无阻尼东速，无阻尼垂速，无阻尼纬度，无阻尼经度，无阻尼高度，X陀螺零偏，Y陀螺零偏,Z陀螺零偏，X加表零偏，Y加表零偏,Z加表零偏，
+                //无阻尼横摇角，无阻尼纵摇角，无阻尼航向角，无阻尼北速，无阻尼东速，无阻尼垂速，无阻尼纬度，无阻尼经度，无阻尼高度，X陀螺零偏，Y陀螺零偏,Z陀螺零偏，X加表零位，Y加表零位,Z加表零位，
 
                 QString dataStr6 = dataInvaildRecordStr+","+"6"+","+C6UndampedRollAngletrDis+","+C6UndampedPitchAngletrDis+","+C6UndampedHeadingAngulartrDis+","+C6UndampedNorthSpeedtrDis+","+C6UndampedEastSpeedtrDis+","+C6VerticalVelocitytrDis+","+C6UndampedLattrDis+","+C6UndampedLongtrDis+","+C6UndampedHeighttrDis+","+C6XGroyStrDis+","+C6YGroyStrDis+","+C6ZGroyStrDis+","+C6XAccelerometerStrDis+","+C6YAccelerometerStrDis+","+C6ZAccelerometerStrDis+"\n";
                 dataOutC6<<dataStr6.toUtf8();
@@ -6883,7 +7141,298 @@ void MainWindow::   handleResults()
             }
         }
 
-        /********************************************************波特率/输出频率信息*******************************************************************/
+        /********************************************************水下状态检测数据格式CC*******************************************************************/
+        else if(bufferStr[0] == 'e' && bufferStr[1] == 'b'&&bufferStr[2] == '9' && bufferStr[3] == '0'&&bufferStr[4] == 'c' && bufferStr[5] == 'c')
+        {
+            QString bufferStrCA = bufferStr;
+            if(bufferStrCA.size() != 18)
+            {
+                continue;
+            }
+            int CAcheckNumInt = 0;
+            QString CAcheckNumStr;
+            for(int i= 4;i<16;i=i+2)
+            {
+                CAcheckNumInt = CAcheckNumInt + bufferStrCA.mid(i,2).toInt(nullptr,16);
+            }
+            CAcheckNumStr = QString::number(CAcheckNumInt,16).right(2);
+            if(CAcheckNumStr == bufferStrCA.mid(16,2))
+            {
+                hasDataVaildCC = 0;
+                /***************************************设备浸水状态***********************************************/
+                bufferStrCA.remove(0,6);
+                QString waterState = bufferStrCA.left(2).mid(0,2);
+                if(waterState=="00")
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_70->setText("无水浸");
+                    else
+                        ui->lineEdit_70->setText("No Water Ingress");
+                }
+                else if(waterState=="01")
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_70->setText("水浸");
+                    else
+                        ui->lineEdit_70->setText("Water Ingress");
+                }
+                else
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_70->setText("错误");
+                    else
+                         ui->lineEdit_70->setText("Error");
+                }
+                /***************************************3路电源控制***********************************************/
+                bufferStrCA.remove(0,2);
+
+                quint8 powerState = quint8(bufferStrCA.left(2).toUInt(nullptr,16));
+                if((powerState & 0x01)==0)
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_61->setText("关");
+                    else
+                         ui->lineEdit_61->setText("Colse");
+
+                }
+                else if((powerState & 0x01)==1)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_61->setText("开");
+                    else
+                         ui->lineEdit_61->setText("Open");
+
+                }
+                else
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_61->setText("错误");
+                    else
+                        ui->lineEdit_61->setText("Error");
+
+                }
+
+                if(((powerState & 0x02)>>1)==0)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_62->setText("关");
+                    else
+                        ui->lineEdit_62->setText("Colse");
+
+                }
+                else if(((powerState & 0x02)>>1)==1)
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_62->setText("开");
+                    else
+                        ui->lineEdit_62->setText("Open");
+
+                }
+                else
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_62->setText("错误");
+                    else
+                        ui->lineEdit_62->setText("Error");
+
+                }
+
+                if(((powerState & 0x04)>>2)==0)
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_60->setText("关");
+                    else
+                        ui->lineEdit_60->setText("Colse");
+
+                }
+                else if(((powerState & 0x04)>>2)==1)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_60->setText("开");
+                    else
+                         ui->lineEdit_60->setText("Open");
+
+                }
+                else
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_60->setText("错误");
+                    else
+                         ui->lineEdit_60->setText("Error");
+
+                }
+                /***************************************3路电源输入检测***********************************************/
+                bufferStrCA.remove(0,2);
+
+                quint8 powerInputState = quint8(bufferStrCA.left(2).toUInt(nullptr,16));
+                if((powerInputState & 0x01)==0)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_64->setText("无");
+                    else
+                         ui->lineEdit_64->setText("None");
+
+                }
+                else if((powerInputState & 0x01)==1)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_64->setText("有");
+                    else
+                         ui->lineEdit_64->setText("Have");
+
+                }
+                else
+                {
+                    if(isEng == 0)
+                          ui->lineEdit_64->setText("错误");
+                    else
+                          ui->lineEdit_64->setText("Error");
+
+                }
+
+                if(((powerInputState & 0x02)>>1)==0)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_65->setText("无");
+                    else
+                          ui->lineEdit_65->setText("None");
+
+                }
+                else if(((powerInputState & 0x02)>>1)==1)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_65->setText("有");
+                    else
+                         ui->lineEdit_65->setText("Have");
+
+                }
+                else
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_65->setText("错误");
+                    else
+                         ui->lineEdit_65->setText("Error");
+
+                }
+
+                if(((powerInputState & 0x04)>>2)==0)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_63->setText("无");
+                    else
+                         ui->lineEdit_63->setText("None");
+
+                }
+                else if(((powerInputState & 0x04)>>2)==1)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_63->setText("有");
+                    else
+                        ui->lineEdit_63->setText("Have");
+
+                }
+                else
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_63->setText("错误");
+                    else
+                        ui->lineEdit_63->setText("Error");
+
+
+                }
+
+                /***************************************3路电源输出检测***********************************************/
+                bufferStrCA.remove(0,2);
+
+                quint8 powerOutputState = quint8(bufferStrCA.left(2).toUInt(nullptr,16));
+                if((powerOutputState & 0x01)==0)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_67->setText("无");
+                    else
+                        ui->lineEdit_67->setText("None");
+
+                }
+                else if((powerOutputState & 0x01)==1)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_67->setText("有");
+                    else
+                        ui->lineEdit_67->setText("Have");
+
+                }
+                else
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_67->setText("错误");
+                    else
+                        ui->lineEdit_67->setText("Error");
+
+                }
+
+                if(((powerOutputState & 0x02)>>1)==0)
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_68->setText("无");
+                    else
+                        ui->lineEdit_68->setText("None");
+
+                }
+                else if(((powerOutputState & 0x02)>>1)==1)
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_68->setText("有");
+                    else
+                        ui->lineEdit_68->setText("Have");
+
+                }
+                else
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_68->setText("错误");
+                    else
+                        ui->lineEdit_68->setText("Error");
+
+                }
+
+                if(((powerOutputState & 0x04)>>2)==0)
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_66->setText("无");
+                    else
+                         ui->lineEdit_66->setText("None");
+
+                }
+                else if(((powerOutputState & 0x04)>>2)==1)
+                {
+                    if(isEng == 0)
+                        ui->lineEdit_66->setText("有");
+                    else
+                         ui->lineEdit_66->setText("Have");
+
+                }
+                else
+                {
+                    if(isEng == 0)
+                         ui->lineEdit_66->setText("错误");
+                    else
+                          ui->lineEdit_66->setText("Error");
+
+                }
+
+                ui->lineEdit_60 ->setStyleSheet("color: blue;");
+                ui->lineEdit_61 ->setStyleSheet("color: blue;");
+                ui->lineEdit_62 ->setStyleSheet("color: blue;");
+                ui->lineEdit_63 ->setStyleSheet("color: blue;");
+                ui->lineEdit_64 ->setStyleSheet("color: blue;");
+                ui->lineEdit_65 ->setStyleSheet("color: blue;");
+                ui->lineEdit_66 ->setStyleSheet("color: blue;");
+                ui->lineEdit_67 ->setStyleSheet("color: blue;");
+                ui->lineEdit_68 ->setStyleSheet("color: blue;");
+                ui->lineEdit_70 ->setStyleSheet("color: blue;");
+            }
+        }
+        /********************************************************波特率/输出频率信息CB*******************************************************************/
         else if(bufferStr[0] == 'e' && bufferStr[1] == 'b'&&bufferStr[2] == '9' && bufferStr[3] == '0'&&bufferStr[4] == 'c' && bufferStr[5] == 'b')
         {
             QString bufferStrCA = bufferStr;
@@ -7050,9 +7599,192 @@ void MainWindow::   handleResults()
 
             }
         }
+        /********************************************************陀螺稳频电压数据格式CD*******************************************************************/
+        else if(bufferStr[0] == 'e' && bufferStr[1] == 'b'&&bufferStr[2] == '9' && bufferStr[3] == '0'&&bufferStr[4] == 'c' && bufferStr[5] == 'd')
+        {
+            QByteArray data = QByteArray::fromHex(bufferStr.toUtf8());
+            if(data.size() != 169)
+            {
+                continue;
+            }
+            // 校验和验证
+            unsigned char checksum = static_cast<unsigned char>(data[168]);
+            unsigned char calculatedChecksum = 0;
+            for (int i = 2; i <= 167; ++i) {
+                calculatedChecksum += static_cast<unsigned char>(data[i]);
+            }
+
+            if (calculatedChecksum != checksum) {
+                qWarning() << "Checksum mismatch!";
+                continue;
+            }
 
 
+            // 解析X轴、Y轴、Z轴陀螺每个温度点的参数和数据
+            struct TempData {
+                quint8 paramSeq;
+                float temperature;
+                quint16 voltage;
+            };
 
+            // 在函数体内定义一个lambda表达式
+              auto  parseTempData = [&data](int offset) -> TempData {
+                  TempData tempData;
+                  tempData.paramSeq = qFromLittleEndian<quint8>(reinterpret_cast<const uchar *>(data.constData() + offset));
+                  tempData.temperature = qFromLittleEndian<qint16>(reinterpret_cast<const char *>(data.constData() + offset + 1)) / 100.0;
+                  tempData.voltage = qFromLittleEndian<quint16>(reinterpret_cast<const uchar *>(data.constData() + offset + 3));
+                  return tempData;
+              };
+
+              // 解析每个温度点
+              TempData xTemp1 = parseTempData(3);  // X轴第一个温度点 (偏移量3)
+              TempData yTemp1 = parseTempData(8);  // Y轴第一个温度点 (偏移量8)
+              TempData zTemp1 = parseTempData(13); // Z轴第一个温度点 (偏移量13)
+
+              TempData xTemp2 = parseTempData(18); // X轴第二个温度点 (偏移量18)
+              TempData yTemp2 = parseTempData(23); // Y轴第二个温度点 (偏移量23)
+              TempData zTemp2 = parseTempData(28); // Z轴第二个温度点 (偏移量28)
+
+              TempData xTemp3 = parseTempData(33); // X轴第三个温度点 (偏移量33)
+              TempData yTemp3 = parseTempData(38); // Y轴第三个温度点 (偏移量38)
+              TempData zTemp3 = parseTempData(43); // Z轴第三个温度点 (偏移量43)
+
+              TempData xTemp4 = parseTempData(48); // X轴第四个温度点 (偏移量48)
+              TempData yTemp4 = parseTempData(53); // Y轴第四个温度点 (偏移量53)
+              TempData zTemp4 = parseTempData(58); // Z轴第四个温度点 (偏移量58)
+
+              TempData xTemp5 = parseTempData(63); // X轴第五个温度点 (偏移量63)
+              TempData yTemp5 = parseTempData(68); // Y轴第五个温度点 (偏移量68)
+              TempData zTemp5 = parseTempData(73); // Z轴第五个温度点 (偏移量73)
+
+              TempData xTemp6 = parseTempData(78); // X轴第六个温度点 (偏移量78)
+              TempData yTemp6 = parseTempData(83); // Y轴第六个温度点 (偏移量83)
+              TempData zTemp6 = parseTempData(88); // Z轴第六个温度点 (偏移量88)
+
+              TempData xTemp7 = parseTempData(93); // X轴第七个温度点 (偏移量93)
+              TempData yTemp7 = parseTempData(98); // Y轴第七个温度点 (偏移量98)
+              TempData zTemp7 = parseTempData(103); // Z轴第七个温度点 (偏移量103)
+
+              TempData xTemp8 = parseTempData(108); // X轴第八个温度点 (偏移量108)
+              TempData yTemp8 = parseTempData(113); // Y轴第八个温度点 (偏移量113)
+              TempData zTemp8 = parseTempData(118); // Z轴第八个温度点 (偏移量118)
+
+              TempData xTemp9 = parseTempData(123); // X轴第九个温度点 (偏移量123)
+              TempData yTemp9 = parseTempData(128); // Y轴第九个温度点 (偏移量128)
+              TempData zTemp9 = parseTempData(133); // Z轴第九个温度点 (偏移量133)
+
+              TempData xTemp10 = parseTempData(138); // X轴第十个温度点 (偏移量138)
+              TempData yTemp10 = parseTempData(143); // Y轴第十个温度点 (偏移量143)
+              TempData zTemp10 = parseTempData(148); // Z轴第十个温度点 (偏移量148)
+
+              TempData xTemp60 = parseTempData(153); // X轴60°温度点 (偏移量153)
+              TempData yTemp60 = parseTempData(158); // Y轴60°温度点 (偏移量158)
+              TempData zTemp60 = parseTempData(163); // Z轴60°温度点 (偏移量163)
+
+              ui->tableWidget_12->setItem(0,0,new QTableWidgetItem(QString::number(xTemp1.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(0,1,new QTableWidgetItem(QString::number(xTemp1.temperature,'f',2)));
+              ui->tableWidget_12->setItem(0,2,new QTableWidgetItem(QString::number(xTemp1.voltage,'f',0)));
+              ui->tableWidget_12->setItem(1,0,new QTableWidgetItem(QString::number(xTemp2.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(1,1,new QTableWidgetItem(QString::number(xTemp2.temperature,'f',2)));
+              ui->tableWidget_12->setItem(1,2,new QTableWidgetItem(QString::number(xTemp2.voltage,'f',0)));
+              ui->tableWidget_12->setItem(2,0,new QTableWidgetItem(QString::number(xTemp3.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(2,1,new QTableWidgetItem(QString::number(xTemp3.temperature,'f',2)));
+              ui->tableWidget_12->setItem(2,2,new QTableWidgetItem(QString::number(xTemp3.voltage,'f',0)));
+              ui->tableWidget_12->setItem(3,0,new QTableWidgetItem(QString::number(xTemp4.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(3,1,new QTableWidgetItem(QString::number(xTemp4.temperature,'f',2)));
+              ui->tableWidget_12->setItem(3,2,new QTableWidgetItem(QString::number(xTemp4.voltage,'f',0)));
+              ui->tableWidget_12->setItem(4,0,new QTableWidgetItem(QString::number(xTemp5.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(4,1,new QTableWidgetItem(QString::number(xTemp5.temperature,'f',2)));
+              ui->tableWidget_12->setItem(4,2,new QTableWidgetItem(QString::number(xTemp5.voltage,'f',0)));
+              ui->tableWidget_12->setItem(5,0,new QTableWidgetItem(QString::number(xTemp6.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(5,1,new QTableWidgetItem(QString::number(xTemp6.temperature,'f',2)));
+              ui->tableWidget_12->setItem(5,2,new QTableWidgetItem(QString::number(xTemp6.voltage,'f',0)));
+              ui->tableWidget_12->setItem(6,0,new QTableWidgetItem(QString::number(xTemp7.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(6,1,new QTableWidgetItem(QString::number(xTemp7.temperature,'f',2)));
+              ui->tableWidget_12->setItem(6,2,new QTableWidgetItem(QString::number(xTemp7.voltage,'f',0)));
+              ui->tableWidget_12->setItem(7,0,new QTableWidgetItem(QString::number(xTemp8.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(7,1,new QTableWidgetItem(QString::number(xTemp8.temperature,'f',2)));
+              ui->tableWidget_12->setItem(7,2,new QTableWidgetItem(QString::number(xTemp8.voltage,'f',0)));
+              ui->tableWidget_12->setItem(8,0,new QTableWidgetItem(QString::number(xTemp9.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(8,1,new QTableWidgetItem(QString::number(xTemp9.temperature,'f',2)));
+              ui->tableWidget_12->setItem(8,2,new QTableWidgetItem(QString::number(xTemp9.voltage,'f',0)));
+              ui->tableWidget_12->setItem(9,0,new QTableWidgetItem(QString::number(xTemp10.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(9,1,new QTableWidgetItem(QString::number(xTemp10.temperature,'f',2)));
+              ui->tableWidget_12->setItem(9,2,new QTableWidgetItem(QString::number(xTemp10.voltage,'f',0)));
+              ui->tableWidget_12->setItem(10,0,new QTableWidgetItem(QString::number(xTemp60.paramSeq,'f',0)));
+              ui->tableWidget_12->setItem(10,1,new QTableWidgetItem(QString::number(xTemp60.temperature,'f',2)));
+              ui->tableWidget_12->setItem(10,2,new QTableWidgetItem(QString::number(xTemp60.voltage,'f',0)));
+
+
+              ui->tableWidget_13->setItem(0,0,new QTableWidgetItem(QString::number(yTemp1.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(0,1,new QTableWidgetItem(QString::number(yTemp1.temperature,'f',2)));
+              ui->tableWidget_13->setItem(0,2,new QTableWidgetItem(QString::number(yTemp1.voltage,'f',0)));
+              ui->tableWidget_13->setItem(1,0,new QTableWidgetItem(QString::number(yTemp2.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(1,1,new QTableWidgetItem(QString::number(yTemp2.temperature,'f',2)));
+              ui->tableWidget_13->setItem(1,2,new QTableWidgetItem(QString::number(yTemp2.voltage,'f',0)));
+              ui->tableWidget_13->setItem(2,0,new QTableWidgetItem(QString::number(yTemp3.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(2,1,new QTableWidgetItem(QString::number(yTemp3.temperature,'f',2)));
+              ui->tableWidget_13->setItem(2,2,new QTableWidgetItem(QString::number(yTemp3.voltage,'f',0)));
+              ui->tableWidget_13->setItem(3,0,new QTableWidgetItem(QString::number(yTemp4.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(3,1,new QTableWidgetItem(QString::number(yTemp4.temperature,'f',2)));
+              ui->tableWidget_13->setItem(3,2,new QTableWidgetItem(QString::number(yTemp4.voltage,'f',0)));
+              ui->tableWidget_13->setItem(4,0,new QTableWidgetItem(QString::number(yTemp5.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(4,1,new QTableWidgetItem(QString::number(yTemp5.temperature,'f',2)));
+              ui->tableWidget_13->setItem(4,2,new QTableWidgetItem(QString::number(yTemp5.voltage,'f',0)));
+              ui->tableWidget_13->setItem(5,0,new QTableWidgetItem(QString::number(yTemp6.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(5,1,new QTableWidgetItem(QString::number(yTemp6.temperature,'f',2)));
+              ui->tableWidget_13->setItem(5,2,new QTableWidgetItem(QString::number(yTemp6.voltage,'f',0)));
+              ui->tableWidget_13->setItem(6,0,new QTableWidgetItem(QString::number(yTemp7.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(6,1,new QTableWidgetItem(QString::number(yTemp7.temperature,'f',2)));
+              ui->tableWidget_13->setItem(6,2,new QTableWidgetItem(QString::number(yTemp7.voltage,'f',0)));
+              ui->tableWidget_13->setItem(7,0,new QTableWidgetItem(QString::number(yTemp8.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(7,1,new QTableWidgetItem(QString::number(yTemp8.temperature,'f',2)));
+              ui->tableWidget_13->setItem(7,2,new QTableWidgetItem(QString::number(yTemp8.voltage,'f',0)));
+              ui->tableWidget_13->setItem(8,0,new QTableWidgetItem(QString::number(yTemp9.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(8,1,new QTableWidgetItem(QString::number(yTemp9.temperature,'f',2)));
+              ui->tableWidget_13->setItem(8,2,new QTableWidgetItem(QString::number(yTemp9.voltage,'f',0)));
+              ui->tableWidget_13->setItem(9,0,new QTableWidgetItem(QString::number(yTemp10.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(9,1,new QTableWidgetItem(QString::number(yTemp10.temperature,'f',2)));
+              ui->tableWidget_13->setItem(9,2,new QTableWidgetItem(QString::number(yTemp10.voltage,'f',0)));
+              ui->tableWidget_13->setItem(10,0,new QTableWidgetItem(QString::number(yTemp60.paramSeq,'f',0)));
+              ui->tableWidget_13->setItem(10,1,new QTableWidgetItem(QString::number(yTemp60.temperature,'f',2)));
+              ui->tableWidget_13->setItem(10,2,new QTableWidgetItem(QString::number(yTemp60.voltage,'f',0)));
+
+              ui->tableWidget_14->setItem(0,0,new QTableWidgetItem(QString::number(zTemp1.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(0,1,new QTableWidgetItem(QString::number(zTemp1.temperature,'f',2)));
+              ui->tableWidget_14->setItem(0,2,new QTableWidgetItem(QString::number(zTemp1.voltage,'f',0)));
+              ui->tableWidget_14->setItem(1,0,new QTableWidgetItem(QString::number(zTemp2.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(1,1,new QTableWidgetItem(QString::number(zTemp2.temperature,'f',2)));
+              ui->tableWidget_14->setItem(1,2,new QTableWidgetItem(QString::number(zTemp2.voltage,'f',0)));
+              ui->tableWidget_14->setItem(2,0,new QTableWidgetItem(QString::number(zTemp3.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(2,1,new QTableWidgetItem(QString::number(zTemp3.temperature,'f',2)));
+              ui->tableWidget_14->setItem(2,2,new QTableWidgetItem(QString::number(zTemp3.voltage,'f',0)));
+              ui->tableWidget_14->setItem(3,0,new QTableWidgetItem(QString::number(zTemp4.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(3,1,new QTableWidgetItem(QString::number(zTemp4.temperature,'f',2)));
+              ui->tableWidget_14->setItem(3,2,new QTableWidgetItem(QString::number(zTemp4.voltage,'f',0)));
+              ui->tableWidget_14->setItem(4,0,new QTableWidgetItem(QString::number(zTemp5.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(4,1,new QTableWidgetItem(QString::number(zTemp5.temperature,'f',2)));
+              ui->tableWidget_14->setItem(4,2,new QTableWidgetItem(QString::number(zTemp5.voltage,'f',0)));
+              ui->tableWidget_14->setItem(5,0,new QTableWidgetItem(QString::number(zTemp6.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(5,1,new QTableWidgetItem(QString::number(zTemp6.temperature,'f',2)));
+              ui->tableWidget_14->setItem(5,2,new QTableWidgetItem(QString::number(zTemp6.voltage,'f',0)));
+              ui->tableWidget_14->setItem(6,0,new QTableWidgetItem(QString::number(zTemp7.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(6,1,new QTableWidgetItem(QString::number(zTemp7.temperature,'f',2)));
+              ui->tableWidget_14->setItem(6,2,new QTableWidgetItem(QString::number(zTemp7.voltage,'f',0)));
+              ui->tableWidget_14->setItem(7,0,new QTableWidgetItem(QString::number(zTemp8.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(7,1,new QTableWidgetItem(QString::number(zTemp8.temperature,'f',2)));
+              ui->tableWidget_14->setItem(7,2,new QTableWidgetItem(QString::number(zTemp8.voltage,'f',0)));
+              ui->tableWidget_14->setItem(8,0,new QTableWidgetItem(QString::number(zTemp9.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(8,1,new QTableWidgetItem(QString::number(zTemp9.temperature,'f',2)));
+              ui->tableWidget_14->setItem(8,2,new QTableWidgetItem(QString::number(zTemp9.voltage,'f',0)));
+              ui->tableWidget_14->setItem(9,0,new QTableWidgetItem(QString::number(zTemp10.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(9,1,new QTableWidgetItem(QString::number(zTemp10.temperature,'f',2)));
+              ui->tableWidget_14->setItem(9,2,new QTableWidgetItem(QString::number(zTemp10.voltage,'f',0)));
+              ui->tableWidget_14->setItem(10,0,new QTableWidgetItem(QString::number(zTemp60.paramSeq,'f',0)));
+              ui->tableWidget_14->setItem(10,1,new QTableWidgetItem(QString::number(zTemp60.temperature,'f',2)));
+              ui->tableWidget_14->setItem(10,2,new QTableWidgetItem(QString::number(zTemp60.voltage,'f',0)));
+
+        }
 
         /********************************************************初始位置信息数据格式01*******************************************************************/
         else if(bufferStr[0] == 'e' && bufferStr[1] == 'b'&&bufferStr[2] == '9' && bufferStr[3] == '0'&&bufferStr[4] == '0' && bufferStr[5] == '1')
@@ -7727,6 +8459,7 @@ void MainWindow::   handleResults()
             QString sysRollAngleStrDis = QString::number(sysRollAngle,'f',4);
             ui->tableWidget_7->setItem(0,0,new QTableWidgetItem(sysRollAngleStrDis));
             ui->tableWidget_7->item(0,0)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+            fRollZero = sysRollAngle;
 
             /***************************************系统纵摇角零位***********************************************/
             bufferStrTemp.remove(0,8);
@@ -7738,6 +8471,7 @@ void MainWindow::   handleResults()
             QString sysPitchAngleStrDis = QString::number(sysPitchAngle,'f',4);
             ui->tableWidget_7->setItem(1,0,new QTableWidgetItem(sysPitchAngleStrDis));
             ui->tableWidget_7->item(1,0)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+            fPitchZero = sysPitchAngle;
 
             /***************************************系统航向角零位***********************************************/
             bufferStrTemp.remove(0,8);
@@ -7747,6 +8481,7 @@ void MainWindow::   handleResults()
             QString sysHeadingAngleStrDis = QString::number(sysHeadingAngle,'f',4);
             ui->tableWidget_7->setItem(2,0,new QTableWidgetItem(sysHeadingAngleStrDis));
             ui->tableWidget_7->item(2,0)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+            fHeadingZero = sysHeadingAngle;
 
         }
 
@@ -7784,6 +8519,7 @@ void MainWindow::   handleResults()
             QString IMUheadingAngleStrDis = QString::number(IMUheadingAngle,'f',4);
             ui->tableWidget_7->setItem(2,1,new QTableWidgetItem(IMUheadingAngleStrDis));
             ui->tableWidget_7->item(2,1)->setTextAlignment(Qt::AlignHCenter|Qt::AlignVCenter);
+
 
             /***************************************输出横摇角零位***********************************************/
             bufferStrTemp.remove(0,8);
@@ -8391,9 +9127,22 @@ void MainWindow::   handleResults()
 void MainWindow::on_btn_openPort_clicked()
 {
     restartTime = 0;
-
-    if(ui->btn_openPort->text()==QString("打开串口"))
+    QString Portstr1;
+    QString Portstr2;
+    if(isEng==0)
     {
+        Portstr1 = QString("打开串口");
+        Portstr2 = QString("关闭串口");
+     }
+    else
+    {
+        Portstr1 = QString("Open Serial");
+        Portstr2 = QString("Close Serial");
+    }
+
+    if(ui->btn_openPort->text()==Portstr1)
+    {
+
         //设置串口名
         QString portName = (ui->box_portName->currentText()).split(":").at(0);
         serial_1 = new QextSerialPort(portName);
@@ -8423,10 +9172,6 @@ void MainWindow::on_btn_openPort_clicked()
                     return;
                 }
                 QTextStream dataOutC1(&C1fileSave);
-                //QString headStr1 = "时间序号,标识号,系统时间,状态时间,纬度°,经度°,东速kn,北速kn,航向角°,横摇角°,纵摇角°,航向角速度°/s,横摇角速度°/s,纵摇角速度°/s,垂荡m,垂速m/s,横荡m,横速m/s,纵荡m,纵速m/s,导航信息有效位,系统状态,时码,参考纬度°,参考经度°,参考组合东速kn,参考组合北速kn,参考阻尼东速kn,参考阻尼北速kn,参考航向°,参考信息有效位";
-
-                //QString headStr1 = "时间序号,标识号,系统时间,状态时间,纬度°,经度°,东速kn,北速kn,航向角°,横摇角°,纵摇角°,航向角速度°/s,横摇角速度°/s,纵摇角速度°/s,垂荡m,垂速m/s,横荡m,横速m/s,纵荡m,纵速m/s,时码有效,经纬度有效,东北速有效,航向有效,纵横摇有效,角速度有效,升沉有效,纵横荡有效,导航状态,工作位置,切换模式,时码,参考纬度°,参考经度°,参考组合东速kn,参考组合北速kn,参考阻尼东速kn,参考阻尼北速kn,参考航向°,参考经纬度,参考组合速度,参考阻尼,参考航向";
-                //dataOutC1<<headStr1.toUtf8();
 
                 C2fileSave.setFileName(C2HisDataName);
                 if(!C2fileSave.open( QIODevice::ReadWrite | QIODevice::Append ))
@@ -8437,10 +9182,6 @@ void MainWindow::on_btn_openPort_clicked()
                     return;
                 }
                 QTextStream dataOutC2(&C2fileSave);
-                //QString headStr2 = "时间序号,标识号,系统时间,收到装订位置,收到GPS位置,收到装订速度,收到GPS速度,收到电磁计程仪速度,收到多普勒计程仪速度,收到时码,收到陀螺标定参数,收到加速度计标定参数,收到陀螺零偏温补系数,收到加速度计零位温补系数,收到装订航向,收到等效零偏,收到漂移补偿,收到状态切换命令,收到系统姿态零位,收到惯组和输出姿态零位,收到杆臂,收到显控参考信息,收到1PPS信号,收到录取同步信号,收到主惯导信息,收到系统编号,收到在舰位置,收到IP地址,装订位置有效,GPS位置有效,装订速度有效,GPS速度有效,电磁速度有效,多普勒对水有效,多普勒对底有效,时码有效,GX漂移估计补偿,GY漂移估计补偿,GZ漂移估计补偿,AX零偏估计补偿,AY零偏估计补偿,AZ零偏估计补偿,水平姿态误差估计补偿,航向误差估计补偿,速度误差估计补偿,位置误差估计补偿,直航状态,静止状态,锚泊状态,振动状态,冲击状态,主惯导位置有效,主惯导速度有效,主惯导姿态有效,主惯导角速度有效,陀螺故障,加速度计故障,IF板故障,采集板故障,通信板故障,接口板故障,解算异常故障,备用电源故障,GX陀螺常值漂移°/h,GY陀螺常值漂移°/h,GZ陀螺常值漂移°/h,AX加速度计零偏mg,AY加速度计零偏mg,AZ加速度计零偏mg";
-                // QString headStr2 = "时间序号,标识号,系统时间,信息传输标识,信息有效标识,故障码,GX陀螺常值漂移°/h,GY陀螺常值漂移°/h,GZ陀螺常值漂移°/h,AX加速度计零偏mg,AY加速度计零偏mg,AZ加速度计零偏mg";
-
-                // dataOutC2<<headStr2.toUtf8();
 
                 C3fileSave.setFileName(C3HisDataName);
                 if(!C3fileSave.open( QIODevice::ReadWrite | QIODevice::Append ))
@@ -8451,10 +9192,6 @@ void MainWindow::on_btn_openPort_clicked()
                     return;
                 }
                 QTextStream dataOutC3(&C3fileSave);
-                //QString headStr3 = "时间序号,标识号,系统时间,信息收到标识,信息有效标识,GPS纬度°,GPS经度°,GPS合速kn,GPS航向°,GPS东速kn,GPS北速kn,电磁速度kn,多普勒对水横向速度kn,多普勒对水纵向速度kn,多普勒对底横向速度kn,多普勒对底纵向速度kn,时码：日月年,时码：天秒s,插值时间us,GPS卫星数,GPS水平精度因子";
-
-                //QString headStr3 = "时间序号,标识号,系统时间,收到装订位置,收到GPS位置,收到装订速度,收到GPS速度,收到电磁计程仪速度,收到多普勒计程仪速度,收到时码,收到1PPS信号,装订位置有效,GPS位置有效,装订速度有效,GPS速度有效,电磁速度有效,多普勒对水有效,多普勒对底有效,时码有效,GPS纬度°,GPS经度°,GPS合速kn,GPS航向°,GPS东速kn,GPS北速kn,电磁速度kn,多普勒对水横向速度kn,多普勒对水纵向速度kn,多普勒对底横向速度kn,多普勒对底纵向速度kn,时码：日月年,时码：天秒s,插值时间us,GPS卫星数,GPS水平精度因子";
-                //dataOutC3<<headStr3.toUtf8();
 
                 C5fileSave.setFileName(C5HisDataName);
                 if(!C5fileSave.open( QIODevice::ReadWrite | QIODevice::Append ))
@@ -8465,10 +9202,6 @@ void MainWindow::on_btn_openPort_clicked()
                     return;
                 }
                 QTextStream dataOutC5(&C5fileSave);
-                //QString headStr5 = "时间序号,标识号,系统时间,X陀螺1s角增量°/h,Y陀螺1s角增量°/h,Z陀螺1s角增量°/h,X加速度计1s速度增量m/s/s,Y加速度计1s速度增量m/s/s,Z加速度计1s速度增量m/s/s,X陀螺1s补偿后角增量°/h,Y陀螺1s补偿后角增量°/h,Z陀螺1s补偿后角增量°/h,X加速度计1s补偿后速度增量m/s/s,Y加速度计1s补偿后速度增量m/s/s,Z加速度计1s补偿后速度增量m/s/s,X陀螺差频p/s,Y陀螺差频p/s,Z陀螺差频p/s,X加速度计差频p/s,Y加速度计差频p/s,Z加速度计差频p/s,X陀螺抖幅p/s,Y陀螺抖幅p/s,Z陀螺抖幅p/s,X陀螺抖频Hz,Y陀螺抖频Hz,Z陀螺抖频Hz,X陀螺温度1°C,X陀螺温度2°C,Y陀螺温度1°C,Y陀螺温度2°C,Z陀螺温度1°C,Z陀螺温度2°C,IF板温度°C,X加速度计温度°C,Y加速度计温度°C,Z加速度计温度°C,采集板温度°C";
-
-                //QString headStr5 = "时间序号,标识号,系统时间,X陀螺1s角增量°/h,Y陀螺1s角增量°/h,Z陀螺1s角增量°/h,X加速度计1s速度增量m/s/s,Y加速度计1s速度增量m/s/s,Z加速度计1s速度增量m/s/s,X陀螺1s补偿后角增量°/h,Y陀螺1s补偿后角增量°/h,Z陀螺1s补偿后角增量°/h,X加速度计1s补偿后速度增量m/s/s,Y加速度计1s补偿后速度增量m/s/s,Z加速度计1s补偿后速度增量m/s/s,X陀螺差频p/s,Y陀螺差频p/s,Z陀螺差频p/s,X加速度计差频p/s,Y加速度计差频p/s,Z加速度计差频p/s,X陀螺抖幅p/s,Y陀螺抖幅p/s,Z陀螺抖幅p/s,X陀螺抖频Hz,Y陀螺抖频Hz,Z陀螺抖频Hz,X陀螺温度1°C,X陀螺温度2°C,Y陀螺温度1°C,Y陀螺温度2°C,Z陀螺温度1°C,Z陀螺温度2°C,IF板温度°C,X加速度计温度°C,Y加速度计温度°C,Z加速度计温度°C,采集板温度°C";
-                //dataOutC5<<headStr5.toUtf8();
 
                 C6fileSave.setFileName(C6HisDataName);
                 if(!C6fileSave.open( QIODevice::ReadWrite | QIODevice::Append ))
@@ -8490,7 +9223,7 @@ void MainWindow::on_btn_openPort_clicked()
                 }
                 QTextStream dataOutC8(&C8fileSave);
             }
-
+            fisrstQuery = 1;
             //清空缓冲区
             serial_1->flush();
             //设置波特率
@@ -8532,7 +9265,10 @@ void MainWindow::on_btn_openPort_clicked()
             ui->box_parityBit->setEnabled(false);
             ui->box_stopBit->setEnabled(false);
 
-            ui->btn_openPort->setText(QString("关闭串口"));
+            if(isEng == 0)
+                ui->btn_openPort->setText(QString("关闭串口"));
+            else
+                ui->btn_openPort->setText(QString("Close Serial"));
             ui->lineEdit_47->setText("0.0000m");
             ui->lineEdit_48->setText("0.0000m");
             ui->lineEdit_45->setText("0.0000kn");
@@ -8551,11 +9287,11 @@ void MainWindow::on_btn_openPort_clicked()
         }
         else
         {
-            QMessageBox::about(NULL, "提示", "无法打开串口！");
+            QMessageBox::about(NULL, tr("提示"), tr("无法打开串口！"));
             return;
         }
     }
-    else
+    else if(ui->btn_openPort->text()==Portstr2)
     {
 
         //关闭串口
@@ -8578,7 +9314,10 @@ void MainWindow::on_btn_openPort_clicked()
         qDrawTime->stop();
 
         qtime->stop();
-        ui->btn_openPort->setText(QString("打开串口"));
+        if(isEng == 0)
+            ui->btn_openPort->setText(QString("打开串口"));
+        else
+            ui->btn_openPort->setText(QString("Open Serial"));
         ui->lineEdit_7->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_8->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_7	->setStyleSheet("color: rgb(0, 0, 0);");
@@ -8602,6 +9341,7 @@ void MainWindow::on_btn_openPort_clicked()
         ui->lineEdit_25	->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_26	->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_27	->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_56	->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_28	->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_29	->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_30	->setStyleSheet("color: rgb(0, 0, 0);");
@@ -8630,13 +9370,58 @@ void MainWindow::on_btn_openPort_clicked()
         ui->lineEdit_46 ->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_45 ->setStyleSheet("color: rgb(0, 0, 0);");
         ui->lineEdit_53 ->setStyleSheet("color: rgb(0, 0, 0);");
-        ui->label_16->setStyleSheet("font:bold;color:Red");
+        ui->lineEdit_60 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_61 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_62 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_63 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_64 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_65 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_66 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_67 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_68 ->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_70 ->setStyleSheet("color: rgb(0, 0, 0);");
+          ui->label_16->setStyleSheet("font:bold;color:Red");
         ui->label_17->setStyleSheet("font:bold;color:Red");
         ui->label_25->setStyleSheet("font:bold;color:Red");
         ui->label_27->setStyleSheet("font:bold;color:Red");
         ui->label_28->setStyleSheet("font:bold;color:Red");
         ui->label_53->setStyleSheet("font:bold;color:Red");
         ui->label_55->setStyleSheet("font:bold;color:Red");
+
+        ui->lineEdit_57	->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_58	->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_59	->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_69->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_72->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_71->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_73->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_76->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_75->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_74->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_77->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_78->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_79->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_84->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_87->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_83->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_88->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_89->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_86->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_81->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_90->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_85->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_82->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_95->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_98->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_94->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_99->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_100->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_97->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_92->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_101->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_96->setStyleSheet("color: rgb(0, 0, 0);");
+        ui->lineEdit_93->setStyleSheet("color: rgb(0, 0, 0);");
+
 
     }
 }
@@ -8674,6 +9459,7 @@ void MainWindow::InitClear()
     ui->lineEdit_26->clear();
     ui->lineEdit_28->clear();
     ui->lineEdit_27->clear();
+    ui->lineEdit_56->clear();
     ui->lineEdit_29->clear();
     ui->lineEdit_31->clear();
     ui->lineEdit_32->clear();
@@ -8700,6 +9486,19 @@ void MainWindow::InitClear()
     ui->lineEdit_46->clear();
     ui->lineEdit_45->clear();
     ui->lineEdit_53->clear();
+    ui->lineEdit_57->clear();
+    ui->lineEdit_58->clear();
+    ui->lineEdit_59->clear();
+    ui->lineEdit_60->clear();
+    ui->lineEdit_61->clear();
+    ui->lineEdit_62->clear();
+    ui->lineEdit_63->clear();
+    ui->lineEdit_64->clear();
+    ui->lineEdit_65->clear();
+    ui->lineEdit_66->clear();
+    ui->lineEdit_67->clear();
+    ui->lineEdit_68->clear();
+    ui->lineEdit_70->clear();
       latitude=0;
     headingAngle=0;
     longitude=0;
@@ -9671,9 +10470,9 @@ void MainWindow::on_pushButton_7_clicked()
 void MainWindow::on_pushButton_8_clicked()
 {
     //判断打开串口是否打开
-    if(ui->btn_openPort->text()=="打开串口")
+    if(ui->btn_openPort->text()=="打开串口"||ui->btn_openPort->text()=="Open Serial")
     {
-        QMessageBox::information(NULL, "提示", "串口未打开！");
+        QMessageBox::information(NULL, tr("提示"), tr("串口未打开！"));
         return;
     }
     qtime->stop();
@@ -9881,2096 +10680,6 @@ void MainWindow::on_pushButton_8_clicked()
 
 }
 
-//void MainWindow::on_pushButton_9_clicked()
-//{
-//       int checkBoxNum = 0;
-//    if(ui->checkBox->isChecked()) checkBoxNum++;4
-//    if(ui->checkBox_2->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_3->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_4->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_5->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_6->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_7->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_8->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_9->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_10->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_11->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_12->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_13->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_14->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_15->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_16->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_17->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_18->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_19->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_20->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_21->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_22->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_23->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_24->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_25->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_26->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_27->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_28->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_29->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_30->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_31->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_32->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_33->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_34->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_35->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_36->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_37->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_38->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_39->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_40->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_41->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_42->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_43->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_44->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_45->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_46->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_47->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_48->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_49->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_50->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_51->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_52->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_53->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_54->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_55->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_56->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_57->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_58->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_59->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_60->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_61->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_62->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_63->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_64->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_65->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_66->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_67->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_68->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_69->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_70->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_71->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_72->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_73->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_74->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_75->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_76->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_77->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_78->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_79->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_80->isChecked())	checkBoxNum++;
-//    if(ui->checkBox_81->isChecked())	checkBoxNum++;
-//    if(checkBoxNum == 0)
-//    {
-//        QMessageBox::warning(NULL, "提示", "未勾选曲线！");
-//        //判断打开串口是否打开
-//        if(ui->btn_openPort->text()=="关闭串口")
-//        {
-//            return;
-//        }
-
-
-//    }
-//    QString path = QFileDialog::getSaveFileName(this,"保存曲线","./","*.dat");
-
-//    if(path.isEmpty())
-//    {
-//            return;
-//    }
-//    QFile fileSave(path);
-//    if(!fileSave.open( QIODevice::WriteOnly ))
-//      {
-//          //无法打开要写入的文件
-//          QMessageBox::warning(this, tr("打开写入文件"),
-//                               tr("打开要写入的文件失败，请检查文件名和是否具有写入权限！"));
-
-//              return;
-
-//      }
-//    QVector<double> C1Vlatitude_save = C1Vlatitude_bk + C1Vlatitude;
-//    QTextStream dataOut(&fileSave);
-//    dataOut.setCodec("utf-8");  // 要读的文件是utf-8编码
-//    dataOut.setGenerateByteOrderMark(true);  // 带bom的utf8
-//    QDateTime current_date_time =QDateTime::currentDateTime();
-//    QString dayStr = current_date_time.toString("yyyy-MM-dd hh:mm:ss");
-//    dataOut<<"<CurveProfile,"<<checkBoxNum<<","<<C1Vlatitude_save.size()*checkBoxNum<<","<<dayStr<<">"<<"\n";   //文件开始格式
-
-//    QProgressDialog *progressDialog = new QProgressDialog(this);
-//    QFont font("ZYSong18030", 12);
-//    progressDialog->setFont(font);
-//    progressDialog->setWindowModality(Qt::WindowModal);
-//    progressDialog->setMinimumDuration(5);
-//    progressDialog->setWindowTitle(tr("Please Wait"));
-//    progressDialog->setLabelText(tr("Copying..."));
-//    progressDialog->setCancelButtonText(tr("Cancel"));
-
-//    if(1)//保存位置曲线
-//    {
-//        int C1VlatitudeNum = 0;
-//        int C1VlongitudeNum = 0;
-//        int C6UndampedLatFloatNum = 0;
-//        int C6UndampedLongFloatNum = 0;
-//        int C6UndampedHeightFloatNum = 0;
-
-//        //保存纬度和经度曲线
-//        if(ui->checkBox->isChecked() == true)
-//            C1VlatitudeNum += C1Vlatitude_bk.size() + C1Vlatitude.size();
-//        if(ui->checkBox_2->isChecked() == true)
-//            C1VlongitudeNum += C1Vlongitude_bk.size() + C1Vlongitude.size();
-//        if(ui->checkBox_73->isChecked() == true)
-//            C6UndampedLatFloatNum += C6VC6UndampedLatFloat_bk.size() + C6VC6UndampedLatFloat.size();
-//        if(ui->checkBox_74->isChecked() == true)
-//            C6UndampedLongFloatNum += C6VC6UndampedLongFloat_bk.size() + C6VC6UndampedLongFloat.size();
-//        if(ui->checkBox_75->isChecked() == true)
-//            C6UndampedHeightFloatNum += C6VC6UndampedHeightFloat_bk.size() + C6VC6UndampedHeightFloat.size();
-//        progressDialog->setRange(0, C1VlatitudeNum+C1VlongitudeNum+C6UndampedLatFloatNum+C6UndampedLongFloatNum+C6UndampedHeightFloatNum);
-//        if(ui->checkBox->isChecked() == true)
-//        {
-
-
-//            dataOut<<tr("<纬度 °,")<<C1Vlatitude_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1Vlatitude_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-//                }
-//                dataOut<<QString::number(C1Vlatitude_save[i],'f',5)<<",";
-//            }
-//            dataOut<<tr("\n</纬度>")<<"\n";
-//        }
-//        if(ui->checkBox_2->isChecked() == true)
-//        {
-//            QVector<double> C1Vlongitude_save = C1Vlongitude_bk + C1Vlongitude;
-//            dataOut<<tr("<经度 °,")<<C1Vlongitude_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1Vlongitude_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VlatitudeNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<QString::number(C1Vlongitude_save[i],'f',5)<<",";
-//            }
-//            dataOut<<tr("\n</经度>")<<"\n";
-//        }
-//        if(ui->checkBox_73->isChecked() == true)
-//        {
-//            QVector<double> C6UndampedLatFloat_save = C6VC6UndampedLatFloat_bk + C6VC6UndampedLatFloat;
-//            dataOut<<tr("<无阻尼纬度 °,")<<C6UndampedLatFloat_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C6UndampedLatFloat_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VlatitudeNum+C1VlongitudeNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<QString::number(C6UndampedLatFloat_save[i],'f',5)<<",";
-//            }
-//            dataOut<<tr("\n</无阻尼纬度>")<<"\n";
-//        }
-//        if(ui->checkBox_74->isChecked() == true)
-//        {
-//            QVector<double> C6UndampedLongFloat_save = C6VC6UndampedLongFloat_bk + C6VC6UndampedLongFloat;
-//            dataOut<<tr("<无阻尼经度 °,")<<C6UndampedLongFloat_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C6UndampedLongFloat_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VlatitudeNum+C1VlongitudeNum+C6UndampedLatFloatNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<QString::number(C6UndampedLongFloat_save[i],'f',5)<<",";
-//            }
-//            dataOut<<tr("\n</无阻尼经度>")<<"\n";
-//        }
-//        if(ui->checkBox_75->isChecked() == true)
-//        {
-//            QVector<double> C6UndampedHeightFloat_save = C6VC6UndampedHeightFloat_bk + C6VC6UndampedHeightFloat;
-//            dataOut<<tr("<无阻尼高度 m,")<<C6UndampedHeightFloat_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C6UndampedHeightFloat_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VlatitudeNum+C1VlongitudeNum+C6UndampedLatFloatNum+C6UndampedLongFloatNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    if(ui->btn_openPort->text()=="关闭串口")
-//                    return;
-
-//                }
-//                dataOut<<QString::number(C6UndampedHeightFloat_save[i],'f',5)<<",";
-//            }
-//            dataOut<<tr("\n</无阻尼高度>")<<"\n";
-//        }
-//    }
-
-//    if(1)//保存航姿曲线
-//    {
-//        int C1VheadingAngularNum = 0;
-//        int C1VrollAngleNum = 0;
-//         int C1VpitchAngleNum = 0;
-//         int C6UndampedRollAngleFloatNum = 0;
-//         int C6UndampedPitchAngleFloatNum = 0;
-//         int C6UndampedHeadingAngularFloatNum = 0;
-
-//        if(ui->checkBox_5->isChecked() == true)
-//            C1VheadingAngularNum += C1VheadingAngle_bk.size() + C1VheadingAngle.size();
-//        if(ui->checkBox_3->isChecked() == true)
-//            C1VrollAngleNum += C1VrollAngle_bk.size() + C1VrollAngle.size();
-//        if(ui->checkBox_4->isChecked() == true)
-//            C1VpitchAngleNum += C1VpitchAngle_bk.size() + C1VpitchAngle.size();
-
-//        if(ui->checkBox_79->isChecked() == true)
-//            C6UndampedRollAngleFloatNum += C6VC6UndampedRollAngleFloat_bk.size() + C6VC6UndampedRollAngleFloat.size();
-//        if(ui->checkBox_80->isChecked() == true)
-//            C6UndampedPitchAngleFloatNum += C6VC6UndampedPitchAngleFloat_bk.size() + C6VC6UndampedPitchAngleFloat.size();
-//        if(ui->checkBox_81->isChecked() == true)
-//            C6UndampedHeadingAngularFloatNum += C6VC6UndampedHeadingAngularFloat_bk.size() + C6VC6UndampedHeadingAngularFloat.size();
-//        progressDialog->setRange(0, C1VheadingAngularNum+C1VrollAngleNum+C1VpitchAngleNum+C6UndampedRollAngleFloatNum+C6UndampedPitchAngleFloatNum+C6UndampedHeadingAngularFloatNum);
-//        if(ui->checkBox_5->isChecked() == true)
-//        {
-
-//            QVector<double> C1VheadingAngular_save = C1VheadingAngle_bk + C1VheadingAngle;
-//            dataOut<<tr("<航向 °,")<<C1VheadingAngular_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VheadingAngular_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<QString::number(C1VheadingAngular_save[i],'f',4)<<",";
-//            }
-//            dataOut<<tr("\n</航向>")<<"\n";
-//        }
-//        if(ui->checkBox_3->isChecked() == true)
-//        {
-//            QVector<double> C1VrollAngle_save = C1VrollAngle_bk + C1VrollAngle;
-//            dataOut<<tr("<横摇角 °,")<<C1VrollAngle_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VrollAngle_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheadingAngularNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1VrollAngle_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</横摇角>")<<"\n";
-//        }
-//        if(ui->checkBox_4->isChecked() == true)
-//        {
-//            QVector<double> C1VpitchAngle_save = C1VpitchAngle_bk + C1VpitchAngle;
-//            dataOut<<tr("<纵摇角 °,")<<C1VpitchAngle_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VpitchAngle_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheadingAngularNum+C1VrollAngleNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1VpitchAngle_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</纵摇角>")<<"\n";
-//        }
-
-//        if(ui->checkBox_79->isChecked() == true)
-//        {
-//            QVector<double> C6UndampedRollAngleFloat_save = C6VC6UndampedRollAngleFloat_bk + C6VC6UndampedRollAngleFloat;
-//            dataOut<<tr("<无阻尼横摇角 °,")<<C6UndampedRollAngleFloat_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C6UndampedRollAngleFloat_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheadingAngularNum+C1VrollAngleNum+C1VpitchAngleNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-//                }
-//                dataOut<<C6UndampedRollAngleFloat_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</无阻尼横摇角>")<<"\n";
-//        }
-//        if(ui->checkBox_80->isChecked() == true)
-//        {
-//            QVector<double> C6UndampedPitchAngleFloat_save = C6VC6UndampedPitchAngleFloat_bk + C6VC6UndampedPitchAngleFloat;
-//            dataOut<<tr("<无阻尼纵摇角 °,")<<C6UndampedPitchAngleFloat_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C6UndampedPitchAngleFloat_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheadingAngularNum+C1VrollAngleNum+C1VpitchAngleNum+C6UndampedRollAngleFloatNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-//                }
-//                dataOut<<C6UndampedPitchAngleFloat_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</无阻尼纵摇角>")<<"\n";
-//        }
-//        if(ui->checkBox_81->isChecked() == true)
-//        {
-//            QVector<double> C6UndampedHeadingAngularFloat_save = C6VC6UndampedHeadingAngularFloat_bk + C6VC6UndampedHeadingAngularFloat;
-//            dataOut<<tr("<无阻尼航向角 °,")<<C6UndampedHeadingAngularFloat_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C6UndampedHeadingAngularFloat_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheadingAngularNum+C1VrollAngleNum+C1VpitchAngleNum+C6UndampedRollAngleFloatNum+C6UndampedPitchAngleFloatNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C6UndampedHeadingAngularFloat_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</无阻尼航向角>")<<"\n";
-//        }
-//    }
-
-//    if(1)//保存姿态角速度线
-//    {
-//        int C1VheadingAngularSpeedNum = 0;
-//        int C1VrollAngleSpeedNum = 0;
-//         int C1VpitchAngleSpeedNum = 0;
-
-//        if(ui->checkBox_6->isChecked() == true)
-//            C1VheadingAngularSpeedNum += C1VheadingAngularSpeed_bk.size() + C1VheadingAngularSpeed.size();
-//        if(ui->checkBox_7->isChecked() == true)
-//            C1VrollAngleSpeedNum += C1VrollAngleSpeed_bk.size() + C1VrollAngleSpeed.size();
-//        if(ui->checkBox_8->isChecked() == true)
-//            C1VpitchAngleSpeedNum += C1VpitchAngleSpeed_bk.size() + C1VpitchAngleSpeed.size();
-//        progressDialog->setRange(0, C1VheadingAngularSpeedNum+C1VrollAngleSpeedNum+C1VpitchAngleSpeedNum);
-//        if(ui->checkBox_6->isChecked() == true)
-//        {
-
-//            QVector<double> C1VheadingAngularSpeed_save = C1VheadingAngularSpeed_bk + C1VheadingAngularSpeed;
-//            dataOut<<tr("<航向角速度 °/s,")<<C1VheadingAngularSpeed_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VheadingAngularSpeed_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1VheadingAngularSpeed_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</航向角速度>")<<"\n";
-//        }
-//        if(ui->checkBox_7->isChecked() == true)
-//        {
-//            QVector<double> C1VrollAngleSpeed_save = C1VrollAngleSpeed_bk + C1VrollAngleSpeed;
-//            dataOut<<tr("<横摇角速度 °/s,")<<C1VrollAngleSpeed_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VrollAngleSpeed_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheadingAngularSpeedNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1VrollAngleSpeed_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</横摇角速度>")<<"\n";
-//        }
-//        if(ui->checkBox_8->isChecked() == true)
-//        {
-//            QVector<double> C1VpitchAngleSpeed_save = C1VpitchAngleSpeed_bk + C1VpitchAngleSpeed;
-//            dataOut<<tr("<纵摇角速度 °/s,")<<C1VpitchAngleSpeed_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VpitchAngleSpeed_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheadingAngularSpeedNum+C1VpitchAngleSpeedNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1VpitchAngleSpeed_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</纵摇角速度>")<<"\n";
-//        }
-
-//    }
-
-//    if(1)//保存速度曲线
-//    {
-//        int C1VnorthSpeedNum = 0;
-//        int C1VeastSpeedNum = 0;
-//        int C6UndampedNorthSpeedFloatNum = 0;
-//        int C6UndampedEastSpeedFloatNum = 0;
-//        int C6VerticalVelocityFloatNum = 0;
-
-//        if(ui->checkBox_9->isChecked() == true)
-//            C1VnorthSpeedNum += C1VnorthSpeed_bk.size() + C1VnorthSpeed.size();
-//        if(ui->checkBox_10->isChecked() == true)
-//            C1VeastSpeedNum += C1VeastSpeed_bk.size() + C1VeastSpeed.size();
-//        if(ui->checkBox_76->isChecked() == true)
-//            C6UndampedNorthSpeedFloatNum += C6VC6UndampedNorthSpeedFloat_bk.size() + C6VC6UndampedNorthSpeedFloat.size();
-//        if(ui->checkBox_77->isChecked() == true)
-//            C6UndampedEastSpeedFloatNum += C6VC6UndampedEastSpeedFloat_bk.size() + C6VC6UndampedEastSpeedFloat.size();
-//        if(ui->checkBox_78->isChecked() == true)
-//            C6VerticalVelocityFloatNum += C6VC6VerticalVelocityFloat_bk.size() + C6VC6VerticalVelocityFloat.size();
-//        progressDialog->setRange(0, C1VnorthSpeedNum+C1VeastSpeedNum+C6UndampedNorthSpeedFloatNum+C6UndampedEastSpeedFloatNum+C6VerticalVelocityFloatNum);
-//        if(ui->checkBox_9->isChecked() == true)
-//        {
-
-//            QVector<double> C1VnorthSpeed_save = C1VnorthSpeed_bk + C1VnorthSpeed;
-//            dataOut<<tr("<北速 kn,")<<C1VnorthSpeed_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VnorthSpeed_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1VnorthSpeed_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</北速>")<<"\n";
-//        }
-//        if(ui->checkBox_10->isChecked() == true)
-//        {
-//            QVector<double> C1VeastSpeed_save = C1VeastSpeed_bk + C1VeastSpeed;
-//            dataOut<<tr("<东速 kn,")<<C1VeastSpeed_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VeastSpeed_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VnorthSpeedNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1VeastSpeed_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</东速>")<<"\n";
-//        }
-//        if(ui->checkBox_76->isChecked() == true)
-//        {
-//            QVector<double> C6UndampedNorthSpeedFloat_save = C6VC6UndampedNorthSpeedFloat_bk + C6VC6UndampedNorthSpeedFloat;
-//            dataOut<<tr("<无阻尼北速 kn,")<<C6UndampedNorthSpeedFloat_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C6UndampedNorthSpeedFloat_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VnorthSpeedNum+C1VeastSpeedNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C6UndampedNorthSpeedFloat_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</无阻尼北速>")<<"\n";
-//        }
-//        if(ui->checkBox_77->isChecked() == true)
-//        {
-//            QVector<double> C6UndampedEastSpeedFloat_save = C6VC6UndampedEastSpeedFloat_bk + C6VC6UndampedEastSpeedFloat;
-//            dataOut<<tr("<无阻尼东速 kn,")<<C6UndampedEastSpeedFloat_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C6UndampedEastSpeedFloat_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VnorthSpeedNum+C1VeastSpeedNum+C6UndampedNorthSpeedFloatNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C6UndampedEastSpeedFloat_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</无阻尼东速>")<<"\n";
-//        }
-//        if(ui->checkBox_78->isChecked() == true)
-//        {
-//            QVector<double> C6VerticalVelocityFloat_save = C6VC6VerticalVelocityFloat_bk + C6VC6VerticalVelocityFloat;
-//            dataOut<<tr("<无阻尼垂速 kn,")<<C6VerticalVelocityFloat_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C6VerticalVelocityFloat_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VnorthSpeedNum+C1VeastSpeedNum+C6UndampedNorthSpeedFloatNum+C6UndampedEastSpeedFloatNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C6VerticalVelocityFloat_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</无阻尼垂速>")<<"\n";
-//        }
-//    }
-
-//    if(1)//保存瞬时线运动曲线
-//    {
-//        int C1VheaveNum = 0;
-//        int C1VverticalVelocityNum = 0;
-//        int C1VswayNum = 0;
-//        int C1VtransverseVelocityNum = 0;
-//        int C1VsurgeNum = 0;
-//        int C1VlongitudinalVelocityNum = 0;
-//        if(ui->checkBox_12->isChecked() == true)
-//            C1VheaveNum += C1Vheave_bk.size() + C1Vheave.size();
-//        if(ui->checkBox_13->isChecked() == true)
-//            C1VverticalVelocityNum += C1VverticalVelocity_bk.size() + C1VverticalVelocity.size();
-//        if(ui->checkBox_11->isChecked() == true)
-//            C1VswayNum += C1Vsway_bk.size() + C1Vsway.size();
-
-//        if(ui->checkBox_15->isChecked() == true)
-//            C1VheaveNum += C1VtransverseVelocity_bk.size() + C1VtransverseVelocity.size();
-//        if(ui->checkBox_16->isChecked() == true)
-//            C1VverticalVelocityNum += C1Vsurge_bk.size() + C1Vsurge.size();
-//        if(ui->checkBox_14->isChecked() == true)
-//            C1VswayNum += C1VlongitudinalVelocity_bk.size() + C1VlongitudinalVelocity.size();
-//        progressDialog->setRange(0, C1VheaveNum+C1VverticalVelocityNum+C1VswayNum+C1VtransverseVelocityNum+C1VsurgeNum+C1VlongitudinalVelocityNum);
-//        if(ui->checkBox_12->isChecked() == true)
-//        {
-
-//            QVector<double> C1Vheave_save = C1Vheave_bk + C1Vheave;
-//            dataOut<<tr("<垂荡 m,")<<C1Vheave_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1Vheave_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1Vheave_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</垂荡>")<<"\n";
-//        }
-//        if(ui->checkBox_13->isChecked() == true)
-//        {
-//            QVector<double> C1VverticalVelocity_save = C1VverticalVelocity_bk + C1VverticalVelocity;
-//            dataOut<<tr("<垂速 m/s,")<<C1VverticalVelocity_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VverticalVelocity_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheaveNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1VverticalVelocity_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</垂速>")<<"\n";
-//        }
-//        if(ui->checkBox_11->isChecked() == true)
-//        {
-//            QVector<double> C1Vsway_save = C1Vsway_bk + C1Vsway;
-//            dataOut<<tr("<横荡 m,")<<C1Vsway_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1Vsway_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheaveNum+C1VverticalVelocityNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1Vsway_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</横荡>")<<"\n";
-//        }
-//        if(ui->checkBox_15->isChecked() == true)
-//        {
-//            QVector<double> C1VtransverseVelocity_save = C1VtransverseVelocity_bk + C1VtransverseVelocity;
-//            dataOut<<tr("<横速 m/s,")<<C1VtransverseVelocity_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VtransverseVelocity_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheaveNum+C1VverticalVelocityNum+C1VswayNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1VtransverseVelocity_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</横速>")<<"\n";
-//        }
-//        if(ui->checkBox_16->isChecked() == true)
-//        {
-//            QVector<double> C1Vsurge_save = C1Vsurge_bk + C1Vsurge;
-//            dataOut<<tr("<纵荡 m,")<<C1Vsurge_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1Vsurge_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheaveNum+C1VverticalVelocityNum+C1VswayNum+C1VtransverseVelocityNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1Vsurge_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</纵荡>")<<"\n";
-//        }
-//        if(ui->checkBox_14->isChecked() == true)
-//        {
-//            QVector<double> C1VlongitudinalVelocity_save = C1VlongitudinalVelocity_bk + C1VlongitudinalVelocity;
-//            dataOut<<tr("<纵速 m/s,")<<C1VlongitudinalVelocity_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C1VlongitudinalVelocity_save.size();i++)
-//            {
-//                progressDialog->setValue(C1VheaveNum+C1VverticalVelocityNum+C1VswayNum+C1VtransverseVelocityNum+C1VsurgeNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C1VlongitudinalVelocity_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</纵速>")<<"\n";
-//        }
-
-//    }
-
-//#ifdef INSIDE
-//    if(1)//不显示增量、补偿增量和差频（原始脉冲）曲线2022-01-20
-//    {
-
-//        if(1)//保存陀螺增量曲线
-//        {
-//            int C5VXGyroAngleIncreaseFloatNum = 0;
-//            int C5VYGyroAngleIncreaseFloatNum = 0;
-//            int C5VZGyroAngleIncreaseFloatNum = 0;
-
-//            if(ui->checkBox_19->isChecked() == true)
-//                C5VXGyroAngleIncreaseFloatNum += C5VXGyroAngleIncreaseFloat_bk.size() + C5VXGyroAngleIncreaseFloat.size();
-//            if(ui->checkBox_18->isChecked() == true)
-//                C5VYGyroAngleIncreaseFloatNum += C5VYGyroAngleIncreaseFloat_bk.size() + C5VYGyroAngleIncreaseFloat.size();
-//            if(ui->checkBox_17->isChecked() == true)
-//                C5VZGyroAngleIncreaseFloatNum += C5VZGyroAngleIncreaseFloat_bk.size() + C5VZGyroAngleIncreaseFloat.size();
-//            progressDialog->setRange(0, C5VXGyroAngleIncreaseFloatNum+C5VYGyroAngleIncreaseFloatNum+C5VZGyroAngleIncreaseFloatNum);
-//            if(ui->checkBox_19->isChecked() == true)
-//            {
-
-//                QVector<double> C5VXGyroAngleIncreaseFloat_save = C5VXGyroAngleIncreaseFloat_bk + C5VXGyroAngleIncreaseFloat;
-//                dataOut<<tr("<X陀螺增量 °/h,")<<C5VXGyroAngleIncreaseFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VXGyroAngleIncreaseFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VXGyroAngleIncreaseFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</X陀螺增量>")<<"\n";
-//            }
-//            if(ui->checkBox_18->isChecked() == true)
-//            {
-//                QVector<double> C5VYGyroAngleIncreaseFloat_save = C5VYGyroAngleIncreaseFloat_bk + C5VYGyroAngleIncreaseFloat;
-//                dataOut<<tr("<Y陀螺增量 °/h,")<<C5VYGyroAngleIncreaseFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VYGyroAngleIncreaseFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXGyroAngleIncreaseFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VYGyroAngleIncreaseFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Y陀螺增量>")<<"\n";
-//            }
-//            if(ui->checkBox_17->isChecked() == true)
-//            {
-//                QVector<double> C5VZGyroAngleIncreaseFloat_save = C5VZGyroAngleIncreaseFloat_bk + C5VZGyroAngleIncreaseFloat;
-//                dataOut<<tr("<Z陀螺增量 °/h,")<<C5VZGyroAngleIncreaseFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VZGyroAngleIncreaseFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXGyroAngleIncreaseFloatNum+C5VYGyroAngleIncreaseFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VZGyroAngleIncreaseFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Z陀螺增量>")<<"\n";
-//            }
-
-//        }
-
-//        if(1)//保存加表增量曲线
-//        {
-//            int C5VXAccelerometerSpeedIncrementFloatNum = 0;
-//            int C5VYAccelerometerSpeedIncrementFloatNum = 0;
-//            int C5VZAccelerometerSpeedIncrementFloatNum = 0;
-
-//            if(ui->checkBox_20->isChecked() == true)
-//                C5VXAccelerometerSpeedIncrementFloatNum += C5VXAccelerometerSpeedIncrementFloat_bk.size() + C5VXAccelerometerSpeedIncrementFloat.size();
-//            if(ui->checkBox_21->isChecked() == true)
-//                C5VYAccelerometerSpeedIncrementFloatNum += C5VYAccelerometerSpeedIncrementFloat_bk.size() + C5VYAccelerometerSpeedIncrementFloat.size();
-//            if(ui->checkBox_22->isChecked() == true)
-//                C5VZAccelerometerSpeedIncrementFloatNum += C5VZAccelerometerSpeedIncrementFloat_bk.size() + C5VZAccelerometerSpeedIncrementFloat.size();
-//            progressDialog->setRange(0, C5VXAccelerometerSpeedIncrementFloatNum+C5VYAccelerometerSpeedIncrementFloatNum+C5VZAccelerometerSpeedIncrementFloatNum);
-//            if(ui->checkBox_20->isChecked() == true)
-//            {
-
-//                QVector<double> C5VXAccelerometerSpeedIncrementFloat_save = C5VXAccelerometerSpeedIncrementFloat_bk + C5VXAccelerometerSpeedIncrementFloat;
-//                dataOut<<tr("<X加表增量 m/s/s,")<<C5VXAccelerometerSpeedIncrementFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VXAccelerometerSpeedIncrementFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VXAccelerometerSpeedIncrementFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</X加表增量>")<<"\n";
-//            }
-//            if(ui->checkBox_21->isChecked() == true)
-//            {
-//                QVector<double> C5VYAccelerometerSpeedIncrementFloat_save = C5VYAccelerometerSpeedIncrementFloat_bk + C5VYAccelerometerSpeedIncrementFloat;
-//                dataOut<<tr("<Y加表增量 m/s/s,")<<C5VYAccelerometerSpeedIncrementFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VYAccelerometerSpeedIncrementFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXAccelerometerSpeedIncrementFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VYAccelerometerSpeedIncrementFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Y加表增量>")<<"\n";
-//            }
-//            if(ui->checkBox_22->isChecked() == true)
-//            {
-//                QVector<double> C5VZAccelerometerSpeedIncrementFloat_save = C5VZAccelerometerSpeedIncrementFloat_bk + C5VZAccelerometerSpeedIncrementFloat;
-//                dataOut<<tr("<Z加表增量 m/s/s,")<<C5VZAccelerometerSpeedIncrementFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VZAccelerometerSpeedIncrementFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXAccelerometerSpeedIncrementFloatNum+C5VZAccelerometerSpeedIncrementFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VZAccelerometerSpeedIncrementFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Z加表增量>")<<"\n";
-//            }
-
-//        }
-
-//        if(1)//保存陀螺1s补偿后角增量曲线
-//        {
-//            int C5VXgyroCompensatedAngleIncrementFloatNum = 0;
-//            int C5VYgyroCompensatedAngleIncrementFloatNum = 0;
-//            int C5VZgyroCompensatedAngleIncrementFloatNum = 0;
-
-//            if(ui->checkBox_23->isChecked() == true)
-//                C5VXgyroCompensatedAngleIncrementFloatNum += C5VXgyroCompensatedAngleIncrementFloat_bk.size() + C5VXgyroCompensatedAngleIncrementFloat.size();
-//            if(ui->checkBox_24->isChecked() == true)
-//                C5VYgyroCompensatedAngleIncrementFloatNum += C5VYgyroCompensatedAngleIncrementFloat_bk.size() + C5VYgyroCompensatedAngleIncrementFloat.size();
-//            if(ui->checkBox_25->isChecked() == true)
-//                C5VZgyroCompensatedAngleIncrementFloatNum += C5VZgyroCompensatedAngleIncrementFloat_bk.size() + C5VZgyroCompensatedAngleIncrementFloat.size();
-//            progressDialog->setRange(0, C5VXgyroCompensatedAngleIncrementFloatNum+C5VYgyroCompensatedAngleIncrementFloatNum+C5VZgyroCompensatedAngleIncrementFloatNum);
-//            if(ui->checkBox_23->isChecked() == true)
-//            {
-
-//                QVector<double> C5VXgyroCompensatedAngleIncrementFloat_save = C5VXgyroCompensatedAngleIncrementFloat_bk + C5VXgyroCompensatedAngleIncrementFloat;
-//                dataOut<<tr("<x陀螺1s补偿后角增量 °/h,")<<C5VXgyroCompensatedAngleIncrementFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VXgyroCompensatedAngleIncrementFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VXgyroCompensatedAngleIncrementFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</x陀螺1s补偿后角增量>")<<"\n";
-//            }
-//            if(ui->checkBox_24->isChecked() == true)
-//            {
-//                QVector<double> C5VYgyroCompensatedAngleIncrementFloat_save = C5VYgyroCompensatedAngleIncrementFloat_bk + C5VYgyroCompensatedAngleIncrementFloat;
-//                dataOut<<tr("<Y陀螺1s补偿后角增量 °/h,")<<C5VYgyroCompensatedAngleIncrementFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VYgyroCompensatedAngleIncrementFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXgyroCompensatedAngleIncrementFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VYgyroCompensatedAngleIncrementFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Y陀螺1s补偿后角增量>")<<"\n";
-//            }
-//            if(ui->checkBox_25->isChecked() == true)
-//            {
-//                QVector<double> C5VZgyroCompensatedAngleIncrementFloat_save = C5VZgyroCompensatedAngleIncrementFloat_bk + C5VZgyroCompensatedAngleIncrementFloat;
-//                dataOut<<tr("<Z陀螺1s补偿后角增量 °/h,")<<C5VZgyroCompensatedAngleIncrementFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VZgyroCompensatedAngleIncrementFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXgyroCompensatedAngleIncrementFloatNum+C5VYgyroCompensatedAngleIncrementFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VZgyroCompensatedAngleIncrementFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Z陀螺1s补偿后角增量>")<<"\n";
-//            }
-
-//        }
-
-//        if(1)//保存加表1s补偿后角增量曲线
-//        {
-//            int C5VXAccVelocityIncrementFloatNum = 0;
-//            int C5VYAccVelocityIncrementFloatNum = 0;
-//            int C5VZAccVelocityIncrementFloatNum = 0;
-
-//            if(ui->checkBox_26->isChecked() == true)
-//                C5VXAccVelocityIncrementFloatNum += C5VXAccVelocityIncrementFloat_bk.size() + C5VXAccVelocityIncrementFloat.size();
-//            if(ui->checkBox_27->isChecked() == true)
-//                C5VYAccVelocityIncrementFloatNum += C5VYAccVelocityIncrementFloat_bk.size() + C5VYAccVelocityIncrementFloat.size();
-//            if(ui->checkBox_28->isChecked() == true)
-//                C5VZAccVelocityIncrementFloatNum += C5VZAccVelocityIncrementFloat_bk.size() + C5VZAccVelocityIncrementFloat.size();
-//            progressDialog->setRange(0, C5VXAccVelocityIncrementFloatNum+C5VYAccVelocityIncrementFloatNum+C5VZAccVelocityIncrementFloatNum);
-//            if(ui->checkBox_26->isChecked() == true)
-//            {
-
-//                QVector<double> C5VXAccVelocityIncrementFloat_save = C5VXAccVelocityIncrementFloat_bk + C5VXAccVelocityIncrementFloat;
-//                dataOut<<tr("<x加速度计1s补偿后速度增量 °/h,")<<C5VXAccVelocityIncrementFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VXAccVelocityIncrementFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VXAccVelocityIncrementFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</x加速度计1s补偿后速度增量>")<<"\n";
-//            }
-//            if(ui->checkBox_27->isChecked() == true)
-//            {
-//                QVector<double> C5VYAccVelocityIncrementFloat_save = C5VYAccVelocityIncrementFloat_bk + C5VYAccVelocityIncrementFloat;
-//                dataOut<<tr("<Y加速度计1s补偿后速度增量 °/h,")<<C5VYAccVelocityIncrementFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VYAccVelocityIncrementFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXAccVelocityIncrementFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VYAccVelocityIncrementFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Y加速度计1s补偿后速度增量>")<<"\n";
-//            }
-//            if(ui->checkBox_28->isChecked() == true)
-//            {
-//                QVector<double> C5VZAccVelocityIncrementFloat_save = C5VZAccVelocityIncrementFloat_bk + C5VZAccVelocityIncrementFloat;
-//                dataOut<<tr("<Z加速度计1s补偿后速度增量 °/h,")<<C5VZAccVelocityIncrementFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VZAccVelocityIncrementFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXAccVelocityIncrementFloatNum+C5VYAccVelocityIncrementFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VZAccVelocityIncrementFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Z加速度计1s补偿后速度增量>")<<"\n";
-//            }
-
-//        }
-
-//        if(1)//保存陀螺差频曲线
-//        {
-//            int C5VXgyroDifFrequencyNum = 0;
-//            int C5VYgyroDifFrequencyNum = 0;
-//            int C5VZgyroDifFrequencyNum = 0;
-
-//            if(ui->checkBox_29->isChecked() == true)
-//                C5VXgyroDifFrequencyNum += C5VXgyroDifFrequency_bk.size() + C5VXgyroDifFrequency.size();
-//            if(ui->checkBox_31->isChecked() == true)
-//                C5VYgyroDifFrequencyNum += C5VYgyroDifFrequency_bk.size() + C5VYgyroDifFrequency.size();
-//            if(ui->checkBox_30->isChecked() == true)
-//                C5VZgyroDifFrequencyNum += C5VZgyroDifFrequency_bk.size() + C5VZgyroDifFrequency.size();
-//            progressDialog->setRange(0, C5VXgyroDifFrequencyNum+C5VYgyroDifFrequencyNum+C5VZgyroDifFrequencyNum);
-//            if(ui->checkBox_29->isChecked() == true)
-//            {
-
-//                QVector<double> C5VXgyroDifFrequency_save = C5VXgyroDifFrequency_bk + C5VXgyroDifFrequency;
-//                dataOut<<tr("<X陀螺差频 p/s,")<<C5VXgyroDifFrequency_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VXgyroDifFrequency_save.size();i++)
-//                {
-//                    progressDialog->setValue(i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                       return;
-
-//                    }
-//                    dataOut<<C5VXgyroDifFrequency_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</X陀螺差频>")<<"\n";
-//            }
-//            if(ui->checkBox_31->isChecked() == true)
-//            {
-//                QVector<double> C5VYgyroDifFrequency_save = C5VYgyroDifFrequency_bk + C5VYgyroDifFrequency;
-//                dataOut<<tr("<Y陀螺差频 p/s,")<<C5VYgyroDifFrequency_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VYgyroDifFrequency_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXgyroDifFrequencyNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VYgyroDifFrequency_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Y陀螺差频>")<<"\n";
-//            }
-//            if(ui->checkBox_30->isChecked() == true)
-//            {
-//                QVector<double> C5VZgyroDifFrequency_save = C5VZgyroDifFrequency_bk + C5VZgyroDifFrequency;
-//                dataOut<<tr("<Z陀螺差频 p/s,")<<C5VZgyroDifFrequency_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VZgyroDifFrequency_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXgyroDifFrequencyNum+C5VYgyroDifFrequencyNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VZgyroDifFrequency_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Z陀螺差频>")<<"\n";
-//            }
-
-//        }
-
-//        if(1)//保存加速度计差频曲线
-//        {
-//            int C5VXaccelerometerDifFreNum = 0;
-//            int C5VYaccelerometerDifFreNum = 0;
-//            int C5VZaccelerometerDifFreNum = 0;
-
-//            if(ui->checkBox_32->isChecked() == true)
-//                C5VXaccelerometerDifFreNum += C5VXaccelerometerDifFre_bk.size() + C5VXaccelerometerDifFre.size();
-//            if(ui->checkBox_33->isChecked() == true)
-//                C5VYaccelerometerDifFreNum += C5VYaccelerometerDifFre_bk.size() + C5VYaccelerometerDifFre.size();
-//            if(ui->checkBox_34->isChecked() == true)
-//                C5VZaccelerometerDifFreNum += C5VZaccelerometerDifFre_bk.size() + C5VZaccelerometerDifFre.size();
-//            progressDialog->setRange(0, C5VXaccelerometerDifFreNum+C5VYaccelerometerDifFreNum+C5VZaccelerometerDifFreNum);
-//            if(ui->checkBox_32->isChecked() == true)
-//            {
-//                QVector<double> C5VXaccelerometerDifFre_save = C5VXaccelerometerDifFre_bk + C5VXaccelerometerDifFre;
-//                dataOut<<tr("<X加速度计差频 p/s,")<<C5VXaccelerometerDifFre_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VXaccelerometerDifFre_save.size();i++)
-//                {
-//                    progressDialog->setValue(i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C5VXaccelerometerDifFre_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</X加速度计差频>")<<"\n";
-//            }
-//            if(ui->checkBox_33->isChecked() == true)
-//            {
-//                QVector<double> C5VYaccelerometerDifFre_save = C5VYaccelerometerDifFre_bk + C5VYaccelerometerDifFre;
-//                dataOut<<tr("<Y加速度计差频 p/s,")<<C5VYaccelerometerDifFre_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VYaccelerometerDifFre_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXaccelerometerDifFreNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                         return;
-
-//                    }
-//                    dataOut<<C5VYaccelerometerDifFre_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Y加速度计差频>")<<"\n";
-//            }
-//            if(ui->checkBox_34->isChecked() == true)
-//            {
-//                QVector<double> C5VZaccelerometerDifFre_save = C5VZaccelerometerDifFre_bk + C5VZaccelerometerDifFre;
-//                dataOut<<tr("<Z加速度计差频 p/s,")<<C5VZaccelerometerDifFre_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C5VZaccelerometerDifFre_save.size();i++)
-//                {
-//                    progressDialog->setValue(C5VXaccelerometerDifFreNum+C5VYaccelerometerDifFreNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        if(ui->btn_openPort->text()=="关闭串口")
-//                        return;
-
-//                    }
-//                    dataOut<<C5VZaccelerometerDifFre_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Z加速度计差频>")<<"\n";
-//            }
-
-//        }
-//    }
-//#endif
-//    if(1)//保存陀螺温度1曲线
-//    {
-//        int C5VXgyroTemp1Num = 0;
-//        int C5VYgyroTemp1Num = 0;
-//         int C5VZgyroTemp1Num = 0;
-
-//        if(ui->checkBox_37->isChecked() == true)
-//            C5VXgyroTemp1Num += C5VXgyroTemp1_bk.size() + C5VXgyroTemp1.size();
-//        if(ui->checkBox_35->isChecked() == true)
-//            C5VYgyroTemp1Num += C5VYgyroTemp1_bk.size() + C5VYgyroTemp1.size();
-//        if(ui->checkBox_36->isChecked() == true)
-//            C5VZgyroTemp1Num += C5VZgyroTemp1_bk.size() + C5VZgyroTemp1.size();
-//        progressDialog->setRange(0, C5VXgyroTemp1Num+C5VYgyroTemp1Num+C5VZgyroTemp1Num);
-//        if(ui->checkBox_37->isChecked() == true)
-//        {
-//            QVector<double> C5VXgyroTemp1_save = C5VXgyroTemp1_bk + C5VXgyroTemp1;
-//            dataOut<<tr("<X陀螺温度1 ℃,")<<C5VXgyroTemp1_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VXgyroTemp1_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VXgyroTemp1_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</X陀螺温度1>")<<"\n";
-//        }
-//        if(ui->checkBox_35->isChecked() == true)
-//        {
-//            QVector<double> C5VYgyroTemp1_save = C5VYgyroTemp1_bk + C5VYgyroTemp1;
-//            dataOut<<tr("<Y陀螺温度1 ℃,")<<C5VYgyroTemp1_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VYgyroTemp1_save.size();i++)
-//            {
-//                progressDialog->setValue(C5VXgyroTemp1Num+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VYgyroTemp1_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</Y陀螺温度1>")<<"\n";
-//        }
-//        if(ui->checkBox_36->isChecked() == true)
-//        {
-//            QVector<double> C5VZgyroTemp1_save = C5VZgyroTemp1_bk + C5VZgyroTemp1;
-//            dataOut<<tr("<Z陀螺温度1 ℃,")<<C5VZgyroTemp1_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VZgyroTemp1_save.size();i++)
-//            {
-//                progressDialog->setValue(C5VXgyroTemp1Num+C5VYgyroTemp1Num+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VZgyroTemp1_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</Z陀螺温度1>")<<"\n";
-//        }
-
-//    }
-
-//    if(1)//保存加速度计温度1曲线
-//    {
-//        int C5VXAccelerometerTempertureNum = 0;
-//        int C5VYAccelerometerTempertureNum = 0;
-//         int C5VZAccelerometerTempertureNum = 0;
-
-//        if(ui->checkBox_40->isChecked() == true)
-//            C5VXAccelerometerTempertureNum += C5VXAccelerometerTemperture_bk.size() + C5VXAccelerometerTemperture.size();
-//        if(ui->checkBox_38->isChecked() == true)
-//            C5VYAccelerometerTempertureNum += C5VYAccelerometerTemperture_bk.size() + C5VYAccelerometerTemperture.size();
-//        if(ui->checkBox_39->isChecked() == true)
-//            C5VZAccelerometerTempertureNum += C5VZAccelerometerTemperture_bk.size() + C5VZAccelerometerTemperture.size();
-//        progressDialog->setRange(0, C5VXAccelerometerTempertureNum+C5VYAccelerometerTempertureNum+C5VZAccelerometerTempertureNum);
-//        if(ui->checkBox_40->isChecked() == true)
-//        {
-//            QVector<double> C5VXAccelerometerTemperture_save = C5VXAccelerometerTemperture_bk + C5VXAccelerometerTemperture;
-//            dataOut<<tr("<X加速度计温度1 ℃,")<<C5VXAccelerometerTemperture_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VXAccelerometerTemperture_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VXAccelerometerTemperture_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</X加速度计温度1>")<<"\n";
-//        }
-//        if(ui->checkBox_38->isChecked() == true)
-//        {
-//            QVector<double> C5VYAccelerometerTemperture_save = C5VYAccelerometerTemperture_bk + C5VYAccelerometerTemperture;
-//            dataOut<<tr("<Y加速度计温度1 ℃,")<<C5VYAccelerometerTemperture_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VYAccelerometerTemperture_save.size();i++)
-//            {
-//                progressDialog->setValue(C5VXAccelerometerTempertureNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VYAccelerometerTemperture_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</Y加速度计温度1>")<<"\n";
-//        }
-//        if(ui->checkBox_39->isChecked() == true)
-//        {
-//            QVector<double> C5VZAccelerometerTemperture_save = C5VZAccelerometerTemperture_bk + C5VZAccelerometerTemperture;
-//            dataOut<<tr("<Z加速度计温度1 ℃,")<<C5VZAccelerometerTemperture_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VZAccelerometerTemperture_save.size();i++)
-//            {
-//                progressDialog->setValue(C5VXAccelerometerTempertureNum+C5VYAccelerometerTempertureNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VZAccelerometerTemperture_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</Z加速度计温度1>")<<"\n";
-//        }
-
-//    }
-//    if(1)//保存陀螺温度2曲线
-//    {
-//        int C5VXgyroTemp2Num = 0;
-//        int C5VYgyroTemp2Num = 0;
-//         int C5VZgyroTemp2Num = 0;
-
-//        if(ui->checkBox_42->isChecked() == true)
-//            C5VXgyroTemp2Num += C5VXgyroTemp2_bk.size() + C5VXgyroTemp2.size();
-//        if(ui->checkBox_43->isChecked() == true)
-//            C5VYgyroTemp2Num += C5VYgyroTemp2_bk.size() + C5VYgyroTemp2.size();
-//        if(ui->checkBox_41->isChecked() == true)
-//            C5VZgyroTemp2Num += C5VZgyroTemp2_bk.size() + C5VZgyroTemp2.size();
-//        progressDialog->setRange(0, C5VXgyroTemp2Num+C5VYgyroTemp2Num+C5VZgyroTemp2Num);
-//        if(ui->checkBox_42->isChecked() == true)
-//        {
-//            QVector<double> C5VXgyroTemp2_save = C5VXgyroTemp2_bk + C5VXgyroTemp2;
-//            dataOut<<tr("<X陀螺温度2 ℃,")<<C5VXgyroTemp2_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VXgyroTemp2_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VXgyroTemp2_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</X陀螺温度2>")<<"\n";
-//        }
-//        if(ui->checkBox_43->isChecked() == true)
-//        {
-//            QVector<double> C5VYgyroTemp2_save = C5VYgyroTemp2_bk + C5VYgyroTemp2;
-//            dataOut<<tr("<Y陀螺温度2 ℃,")<<C5VYgyroTemp2_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VYgyroTemp2_save.size();i++)
-//            {
-//                progressDialog->setValue(C5VXgyroTemp2Num+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VYgyroTemp2_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</Y陀螺温度2>")<<"\n";
-//        }
-//        if(ui->checkBox_41->isChecked() == true)
-//        {
-//            QVector<double> C5VZgyroTemp2_save = C5VZgyroTemp2_bk + C5VZgyroTemp2;
-//            dataOut<<tr("<Z陀螺温度2 ℃,")<<C5VZgyroTemp2_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VZgyroTemp2_save.size();i++)
-//            {
-//                progressDialog->setValue(C5VXgyroTemp2Num+C5VYgyroTemp2Num+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                   return;
-
-//                }
-//                dataOut<<C5VZgyroTemp2_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</Z陀螺温度2>")<<"\n";
-//        }
-
-//    }
-//    if(1)//保存陀螺抖幅曲线
-//    {
-//        int C5VXgyroAmplitudeJitterNum = 0;
-//        int C5VYgyroAmplitudeJitterNum = 0;
-//         int C5VZgyroAmplitudeJitterNum = 0;
-
-//        if(ui->checkBox_45->isChecked() == true)
-//            C5VXgyroAmplitudeJitterNum += C5VXgyroAmplitudeJitter_bk.size() + C5VXgyroAmplitudeJitter.size();
-//        if(ui->checkBox_46->isChecked() == true)
-//            C5VYgyroAmplitudeJitterNum += C5VYgyroAmplitudeJitter_bk.size() + C5VYgyroAmplitudeJitter.size();
-//        if(ui->checkBox_44->isChecked() == true)
-//            C5VZgyroAmplitudeJitterNum += C5VZgyroAmplitudeJitter_bk.size() + C5VZgyroAmplitudeJitter.size();
-//        progressDialog->setRange(0, C5VXgyroAmplitudeJitterNum+C5VYgyroAmplitudeJitterNum+C5VZgyroAmplitudeJitterNum);
-//        if(ui->checkBox_45->isChecked() == true)
-//        {
-//            QVector<double> C5VXgyroAmplitudeJitter_save = C5VXgyroAmplitudeJitter_bk + C5VXgyroAmplitudeJitter;
-//            dataOut<<tr("<X陀螺抖幅 p/s,")<<C5VXgyroAmplitudeJitter_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VXgyroAmplitudeJitter_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VXgyroAmplitudeJitter_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</X陀螺抖幅>")<<"\n";
-//        }
-//        if(ui->checkBox_46->isChecked() == true)
-//        {
-//            QVector<double> C5VYgyroAmplitudeJitter_save = C5VYgyroAmplitudeJitter_bk + C5VYgyroAmplitudeJitter;
-//            dataOut<<tr("<Y陀螺抖幅 p/s,")<<C5VYgyroAmplitudeJitter_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VYgyroAmplitudeJitter_save.size();i++)
-//            {
-//                progressDialog->setValue(C5VXgyroAmplitudeJitterNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VYgyroAmplitudeJitter_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</Y陀螺抖幅>")<<"\n";
-//        }
-//        if(ui->checkBox_44->isChecked() == true)
-//        {
-//            QVector<double> C5VZgyroAmplitudeJitter_save = C5VZgyroAmplitudeJitter_bk + C5VZgyroAmplitudeJitter;
-//            dataOut<<tr("<Z陀螺抖幅 p/s,")<<C5VZgyroAmplitudeJitter_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VZgyroAmplitudeJitter_save.size();i++)
-//            {
-//                progressDialog->setValue(C5VXgyroAmplitudeJitterNum+C5VYgyroAmplitudeJitterNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VZgyroAmplitudeJitter_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</Z陀螺抖幅>")<<"\n";
-//        }
-
-//    }
-
-//    if(1)//保存陀螺抖频曲线
-//    {
-//        int C5VXgyroAmpl1itudeFreNum = 0;
-//        int C5VYgyroAmpl1itudeFreNum = 0;
-//         int C5VZgyroAmpl1itudeFreNum = 0;
-
-//        if(ui->checkBox_48->isChecked() == true)
-//            C5VXgyroAmpl1itudeFreNum += C5VXgyroAmpl1itudeFre_bk.size() + C5VXgyroAmpl1itudeFre.size();
-//        if(ui->checkBox_49->isChecked() == true)
-//            C5VYgyroAmpl1itudeFreNum += C5VYgyroAmpl1itudeFre_bk.size() + C5VYgyroAmpl1itudeFre.size();
-//        if(ui->checkBox_47->isChecked() == true)
-//            C5VZgyroAmpl1itudeFreNum += C5VZgyroAmpl1itudeFre_bk.size() + C5VZgyroAmpl1itudeFre.size();
-//        progressDialog->setRange(0, C5VXgyroAmpl1itudeFreNum+C5VYgyroAmpl1itudeFreNum+C5VZgyroAmpl1itudeFreNum);
-//        if(ui->checkBox_48->isChecked() == true)
-//        {
-//            QVector<double> C5VXgyroAmpl1itudeFre_save = C5VXgyroAmpl1itudeFre_bk + C5VXgyroAmpl1itudeFre;
-//            dataOut<<tr("<X陀螺抖频 Hz,")<<C5VXgyroAmpl1itudeFre_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VXgyroAmpl1itudeFre_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                     return;
-
-//                }
-//                dataOut<<C5VXgyroAmpl1itudeFre_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</X陀螺抖频>")<<"\n";
-//        }
-//        if(ui->checkBox_49->isChecked() == true)
-//        {
-//            QVector<double> C5VYgyroAmpl1itudeFre_save = C5VYgyroAmpl1itudeFre_bk + C5VYgyroAmpl1itudeFre;
-//            dataOut<<tr("<Y陀螺抖频 Hz,")<<C5VYgyroAmpl1itudeFre_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VYgyroAmpl1itudeFre_save.size();i++)
-//            {
-//                progressDialog->setValue(C5VXgyroAmpl1itudeFreNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C5VYgyroAmpl1itudeFre_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</Y陀螺抖频>")<<"\n";
-//        }
-//        if(ui->checkBox_47->isChecked() == true)
-//        {
-//            QVector<double> C5VZgyroAmpl1itudeFre_save = C5VZgyroAmpl1itudeFre_bk + C5VZgyroAmpl1itudeFre;
-//            dataOut<<tr("<Z陀螺抖频 Hz,")<<C5VZgyroAmpl1itudeFre_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C5VZgyroAmpl1itudeFre_save.size();i++)
-//            {
-//                progressDialog->setValue(C5VXgyroAmpl1itudeFreNum+C5VYgyroAmpl1itudeFreNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                     return;
-
-//                }
-//                dataOut<<C5VZgyroAmpl1itudeFre_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</Z陀螺抖频>")<<"\n";
-//        }
-
-//    }
-
-//    if(1)//保存卫导曲线
-//    {
-//        int C3VlongitudeNum = 0;
-//        int C3VGPSlatitudeNum = 0;
-//         int C3VtogetherSpeedNum = 0;
-//         int C3VheadingAngleNum = 0;
-//         int C3VcombinedEastSpeedNum = 0;
-//          int C3VcombinedNorthSpeedNum = 0;
-//        if(ui->checkBox_54->isChecked() == true)
-//            C3VlongitudeNum += C3Vlongitude_bk.size() + C3Vlongitude.size();
-//        if(ui->checkBox_51->isChecked() == true)
-//            C3VGPSlatitudeNum += C3VGPSlatitude_bk.size() + C3VGPSlatitude.size();
-//        if(ui->checkBox_50->isChecked() == true)
-//            C3VtogetherSpeedNum += C3VtogetherSpeed_bk.size() + C3VtogetherSpeed.size();
-
-//        if(ui->checkBox_52->isChecked() == true)
-//            C3VheadingAngleNum += C3VheadingAngle_bk.size() + C3VheadingAngle.size();
-//        if(ui->checkBox_53->isChecked() == true)
-//            C3VcombinedEastSpeedNum += C3VcombinedEastSpeed_bk.size() + C3VcombinedEastSpeed.size();
-//        if(ui->checkBox_60->isChecked() == true)
-//            C3VcombinedNorthSpeedNum += C3VcombinedNorthSpeed_bk.size() + C3VcombinedNorthSpeed.size();
-//        progressDialog->setRange(0, C3VlongitudeNum+C3VGPSlatitudeNum+C3VtogetherSpeedNum+C3VheadingAngleNum+C3VcombinedEastSpeedNum+C3VcombinedNorthSpeedNum);
-//        if(ui->checkBox_54->isChecked() == true)
-//        {
-
-//            QVector<double> C3Vlongitude_save = C3Vlongitude_bk + C3Vlongitude;
-//            dataOut<<tr("<GPS经度 °,")<<C3Vlongitude_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3Vlongitude_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                   return;
-
-//                }
-//                dataOut<<C3Vlongitude_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</GPS经度>")<<"\n";
-//        }
-//        if(ui->checkBox_51->isChecked() == true)
-//        {
-//            QVector<double> C3VGPSlatitude_save = C3VGPSlatitude_bk + C3VGPSlatitude;
-//            dataOut<<tr("<GPS纬度 °,")<<C3VGPSlatitude_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3VGPSlatitude_save.size();i++)
-//            {
-//                progressDialog->setValue(C3VlongitudeNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C3VGPSlatitude_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</GPS纬度>")<<"\n";
-//        }
-//        if(ui->checkBox_50->isChecked() == true)
-//        {
-//            QVector<double> C3VtogetherSpeed_save = C3VtogetherSpeed_bk + C3VtogetherSpeed;
-//            dataOut<<tr("<GPS合速 kn,")<<C3VtogetherSpeed_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3VtogetherSpeed_save.size();i++)
-//            {
-//                progressDialog->setValue(C3VlongitudeNum+C3VGPSlatitudeNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C3VtogetherSpeed_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</GPS合速>")<<"\n";
-//        }
-//        if(ui->checkBox_52->isChecked() == true)
-//        {
-//            QVector<double> C3VheadingAngle_save = C3VheadingAngle_bk + C3VheadingAngle;
-//            dataOut<<tr("<GPS航向 °,")<<C3VheadingAngle_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3VheadingAngle_save.size();i++)
-//            {
-//                progressDialog->setValue(C3VlongitudeNum+C3VGPSlatitudeNum+C3VtogetherSpeedNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C3VheadingAngle_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</GPS航向>")<<"\n";
-//        }
-//        if(ui->checkBox_53->isChecked() == true)
-//        {
-//            QVector<double> C3VcombinedEastSpeed_save = C3VcombinedEastSpeed_bk + C3VcombinedEastSpeed;
-//            dataOut<<tr("<GPS东速 kn,")<<C3VcombinedEastSpeed_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3VcombinedEastSpeed_save.size();i++)
-//            {
-//                progressDialog->setValue(C3VlongitudeNum+C3VGPSlatitudeNum+C3VtogetherSpeedNum+C3VheadingAngleNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C3VcombinedEastSpeed_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</GPS东速>")<<"\n";
-//        }
-//        if(ui->checkBox_60->isChecked() == true)
-//        {
-//            QVector<double> C3VcombinedNorthSpeed_save = C3VcombinedNorthSpeed_bk + C3VcombinedNorthSpeed;
-//            dataOut<<tr("<GPS北速 kn,")<<C3VcombinedNorthSpeed_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3VcombinedNorthSpeed_save.size();i++)
-//            {
-//                progressDialog->setValue(C3VlongitudeNum+C3VGPSlatitudeNum+C3VtogetherSpeedNum+C3VheadingAngleNum+C3VcombinedEastSpeedNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C3VcombinedNorthSpeed_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</GPS北速>")<<"\n";
-//        }
-
-//    }
-
-//    if(1)//保存计程仪曲线
-//    {
-//        int C3VwaterXNum = 0;
-//        int C3VwaterYNum = 0;
-//        int C3VbottomXNum = 0;
-//        int C3VbottomYNum = 0;
-//        int C3VelectromagnetismSpeedNum = 0;
-
-//        if(ui->checkBox_59->isChecked() == true)
-//            C3VwaterXNum += C3VwaterX_bk.size() + C3VwaterX.size();
-//        if(ui->checkBox_56->isChecked() == true)
-//            C3VwaterYNum += C3VwaterY_bk.size() + C3VwaterY.size();
-//        if(ui->checkBox_57->isChecked() == true)
-//            C3VbottomXNum += C3VbottomX_bk.size() + C3VbottomX.size();
-
-//        if(ui->checkBox_55->isChecked() == true)
-//            C3VbottomYNum += C3VbottomY_bk.size() + C3VbottomY.size();
-//        if(ui->checkBox_58->isChecked() == true)
-//            C3VelectromagnetismSpeedNum += C3VelectromagnetismSpeed_bk.size() + C3VelectromagnetismSpeed.size();
-//        progressDialog->setRange(0, C3VwaterXNum+C3VwaterYNum+C3VbottomXNum+C3VbottomYNum+C3VelectromagnetismSpeedNum);
-//        if(ui->checkBox_59->isChecked() == true)
-//        {
-
-//            QVector<double> C3VwaterX_save = C3VwaterX_bk + C3VwaterX;
-//            dataOut<<tr("<多普勒对水横向速度 kn,")<<C3VwaterX_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3VwaterX_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C3VwaterX_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</多普勒对水横向速度>")<<"\n";
-//        }
-//        if(ui->checkBox_56->isChecked() == true)
-//        {
-//            QVector<double> C3VwaterY_save = C3VwaterY_bk + C3VwaterY;
-//            dataOut<<tr("<多普勒对水纵向速度 kn,")<<C3VwaterY_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3VwaterY_save.size();i++)
-//            {
-//                progressDialog->setValue(C3VwaterXNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C3VwaterY_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</多普勒对水纵向速度>")<<"\n";
-//        }
-//        if(ui->checkBox_57->isChecked() == true)
-//        {
-//            QVector<double> C3VbottomX_save = C3VbottomX_bk + C3VbottomX;
-//            dataOut<<tr("<多普勒对底横向速度 kn,")<<C3VbottomX_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3VbottomX_save.size();i++)
-//            {
-//                progressDialog->setValue(C3VwaterXNum+C3VwaterYNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C3VbottomX_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</多普勒对底横向速度>")<<"\n";
-//        }
-//        if(ui->checkBox_55->isChecked() == true)
-//        {
-//            QVector<double> C3VbottomY_save = C3VbottomY_bk + C3VbottomY;
-//            dataOut<<tr("<多普勒对底纵向速度 kn,")<<C3VbottomY_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3VbottomY_save.size();i++)
-//            {
-//                progressDialog->setValue(C3VwaterXNum+C3VwaterYNum+C3VbottomXNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C3VbottomY_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</多普勒对底纵向速度>")<<"\n";
-//        }
-//        if(ui->checkBox_58->isChecked() == true)
-//        {
-//            QVector<double> C3VelectromagnetismSpeed_save = C3VelectromagnetismSpeed_bk + C3VelectromagnetismSpeed;
-//            dataOut<<tr("<电磁速度 kn,")<<C3VelectromagnetismSpeed_save.size()<<">"<<"\n";
-//            for(int i = 0;i<C3VelectromagnetismSpeed_save.size();i++)
-//            {
-//                progressDialog->setValue(C3VwaterXNum+C3VwaterYNum+C3VbottomXNum+C3VbottomYNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<C3VelectromagnetismSpeed_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</电磁速度>")<<"\n";
-//        }
-//    }
-//#ifdef INSIDE
-//    if(1)//不显示零偏曲线2022-01-20
-//    {
-//        if(1)//保存陀螺零偏曲线
-//        {
-//            int C6VC6XGroyFloatNum = 0;
-//            int C6VC6YGroyFloatNum = 0;
-//            int C6VC6ZGroyFloatNum = 0;
-
-//            if(ui->checkBox_61->isChecked() == true)
-//                C6VC6XGroyFloatNum += C6VC6XGroyFloat_bk.size() + C6VC6XGroyFloat.size();
-//            if(ui->checkBox_63->isChecked() == true)
-//                C6VC6YGroyFloatNum += C6VC6YGroyFloat_bk.size() + C6VC6YGroyFloat.size();
-//            if(ui->checkBox_62->isChecked() == true)
-//                C6VC6ZGroyFloatNum += C6VC6ZGroyFloat_bk.size() + C6VC6ZGroyFloat.size();
-//            progressDialog->setRange(0, C6VC6XGroyFloatNum+C6VC6YGroyFloatNum+C6VC6ZGroyFloatNum);
-//            if(ui->checkBox_61->isChecked() == true)
-//            {
-//                QVector<double> C6VC6XGroyFloat_save = C6VC6XGroyFloat_bk + C6VC6XGroyFloat;
-//                dataOut<<tr("<X陀螺零偏 °/h,")<<C6VC6XGroyFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C6VC6XGroyFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                       return;
-
-//                    }
-//                    dataOut<<C6VC6XGroyFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</X陀螺零偏>")<<"\n";
-//            }
-//            if(ui->checkBox_63->isChecked() == true)
-//            {
-//                QVector<double> C6VC6YGroyFloat_save = C6VC6YGroyFloat_bk + C6VC6YGroyFloat;
-//                dataOut<<tr("<Y陀螺零偏 °/h,")<<C6VC6YGroyFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C6VC6YGroyFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C6VC6XGroyFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                       return;
-
-//                    }
-//                    dataOut<<C6VC6YGroyFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Y陀螺零偏>")<<"\n";
-//            }
-//            if(ui->checkBox_62->isChecked() == true)
-//            {
-//                QVector<double> C6VC6ZGroyFloat_save = C6VC6ZGroyFloat_bk + C6VC6ZGroyFloat;
-//                dataOut<<tr("<Z陀螺零偏 °/h,")<<C6VC6ZGroyFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C6VC6ZGroyFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C6VC6XGroyFloatNum+C6VC6YGroyFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C6VC6ZGroyFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Z陀螺零偏>")<<"\n";
-//            }
-//        }
-//        if(1)//保存加速度计零偏曲线
-//        {
-//            int C6VC6XAccelerometerFloatNum = 0;
-//            int C6VC6YAccelerometerFloatNum = 0;
-//            int C6VC6ZAccelerometerFloatNum = 0;
-
-//            if(ui->checkBox_65->isChecked() == true)
-//                C6VC6XAccelerometerFloatNum += C6VC6XAccelerometerFloat_bk.size() + C6VC6XAccelerometerFloat.size();
-//            if(ui->checkBox_64->isChecked() == true)
-//                C6VC6YAccelerometerFloatNum += C6VC6YAccelerometerFloat_bk.size() + C6VC6YAccelerometerFloat.size();
-//            if(ui->checkBox_66->isChecked() == true)
-//                C6VC6ZAccelerometerFloatNum += C6VC6ZAccelerometerFloat_bk.size() + C6VC6ZAccelerometerFloat.size();
-//            progressDialog->setRange(0, C6VC6XAccelerometerFloatNum+C6VC6YAccelerometerFloatNum+C6VC6ZAccelerometerFloatNum);
-//            if(ui->checkBox_65->isChecked() == true)
-//            {
-//                QVector<double> C6VC6XAccelerometerFloat_save = C6VC6XAccelerometerFloat_bk + C6VC6XAccelerometerFloat;
-//                dataOut<<tr("<X加速度计零偏 mg,")<<C6VC6XAccelerometerFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C6VC6XAccelerometerFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C6VC6XAccelerometerFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</X加速度计零偏>")<<"\n";
-//            }
-//            if(ui->checkBox_64->isChecked() == true)
-//            {
-//                QVector<double> C6VC6YAccelerometerFloat_save = C6VC6YAccelerometerFloat_bk + C6VC6YAccelerometerFloat;
-//                dataOut<<tr("<Y加速度计零偏 mg,")<<C6VC6YAccelerometerFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C6VC6YAccelerometerFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C6VC6XAccelerometerFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                       return;
-
-//                    }
-//                    dataOut<<C6VC6YAccelerometerFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Y加速度计零偏>")<<"\n";
-//            }
-//            if(ui->checkBox_66->isChecked() == true)
-//            {
-//                QVector<double> C6VC6ZAccelerometerFloat_save = C6VC6ZAccelerometerFloat_bk + C6VC6ZAccelerometerFloat;
-//                dataOut<<tr("<Z加速度计零偏 mg,")<<C6VC6ZAccelerometerFloat_save.size()<<">"<<"\n";
-//                for(int i = 0;i<C6VC6ZAccelerometerFloat_save.size();i++)
-//                {
-//                    progressDialog->setValue(C6VC6XAccelerometerFloatNum+C6VC6YAccelerometerFloatNum+i);
-//                    if(progressDialog->wasCanceled())
-//                    {
-//                        delete progressDialog;
-//                        fileSave.close();
-//                        fileSave.remove();
-//                        return;
-
-//                    }
-//                    dataOut<<C6VC6ZAccelerometerFloat_save[i]<<",";
-//                }
-//                dataOut<<tr("\n</Z加速度计零偏>")<<"\n";
-//            }
-//        }
-//    }
-//#endif
-//    if(1)//保存速度误差曲线
-//    {
-//        int VeastSpeedErrorNum = 0;
-//        int VnorthSpeedErrorNum = 0;
-//         int VtogetherSpeedErrorNum = 0;
-
-//        if(ui->checkBox_67->isChecked() == true)
-//            VeastSpeedErrorNum += VeastSpeedError_bk.size() + VeastSpeedError.size();
-//        if(ui->checkBox_69->isChecked() == true)
-//            VnorthSpeedErrorNum += VnorthSpeedError_bk.size() + VnorthSpeedError.size();
-//        if(ui->checkBox_68->isChecked() == true)
-//            VtogetherSpeedErrorNum += VtogetherSpeedError_bk.size() + VtogetherSpeedError.size();
-//        progressDialog->setRange(0, VeastSpeedErrorNum+VnorthSpeedErrorNum+VtogetherSpeedErrorNum);
-//        if(ui->checkBox_67->isChecked() == true)
-//        {
-//            QVector<double> VeastSpeedError_save = VeastSpeedError_bk + VeastSpeedError;
-//            dataOut<<tr("<东速误差 kn,")<<VeastSpeedError_save.size()<<">"<<"\n";
-//            for(int i = 0;i<VeastSpeedError_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                   return;
-
-//                }
-//                dataOut<<VeastSpeedError_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</东速误差>")<<"\n";
-//        }
-//        if(ui->checkBox_68->isChecked() == true)
-//        {
-//            QVector<double> VnorthSpeedError_save = VnorthSpeedError_bk + VnorthSpeedError;
-//            dataOut<<tr("<北速误差 kn,")<<VnorthSpeedError_save.size()<<">"<<"\n";
-//            for(int i = 0;i<VnorthSpeedError_save.size();i++)
-//            {
-//                progressDialog->setValue(VeastSpeedErrorNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<VnorthSpeedError_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</北速误差>")<<"\n";
-//        }
-//        if(ui->checkBox_68->isChecked() == true)
-//        {
-//            QVector<double> VtogetherSpeedError_save = VtogetherSpeedError_bk + VtogetherSpeedError;
-//            dataOut<<tr("<合速误差 kn,")<<VtogetherSpeedError_save.size()<<">"<<"\n";
-//            for(int i = 0;i<VtogetherSpeedError_save.size();i++)
-//            {
-//                progressDialog->setValue(VeastSpeedErrorNum+VnorthSpeedErrorNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                     return;
-
-//                }
-//                dataOut<<VtogetherSpeedError_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</合速误差>")<<"\n";
-//        }
-//    }
-
-//    if(1)//保存位置误差曲线
-//    {
-//        int VlatitudeErrorNum = 0;
-//        int VlongitudeErrorNum = 0;
-//         int VpositionErrorNum = 0;
-
-//        if(ui->checkBox_70->isChecked() == true)
-//            VlatitudeErrorNum += VlatitudeError_bk.size() + VlatitudeError.size();
-//        if(ui->checkBox_72->isChecked() == true)
-//            VlongitudeErrorNum += VlongitudeError_bk.size() + VlongitudeError.size();
-//        if(ui->checkBox_71->isChecked() == true)
-//            VpositionErrorNum += VpositionError_bk.size() + VpositionError.size();
-//        progressDialog->setRange(0, VlatitudeErrorNum+VlongitudeErrorNum+VpositionErrorNum);
-//        if(ui->checkBox_70->isChecked() == true)
-//        {
-//            QVector<double> VlatitudeError_save = VlatitudeError_bk + VlatitudeError;
-//            dataOut<<tr("<纬度误差 nm,")<<VlatitudeError_save.size()<<">"<<"\n";
-//            for(int i = 0;i<VlatitudeError_save.size();i++)
-//            {
-//                progressDialog->setValue(i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<VlatitudeError_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</纬度误差>")<<"\n";
-//        }
-//        if(ui->checkBox_72->isChecked() == true)
-//        {
-//            QVector<double> VlongitudeError_save = VlongitudeError_bk + VlongitudeError;
-//            dataOut<<tr("<经度误差 nm,")<<VlongitudeError_save.size()<<">"<<"\n";
-//            for(int i = 0;i<VlongitudeError_save.size();i++)
-//            {
-//                progressDialog->setValue(VlatitudeErrorNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<VlongitudeError_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</经度误差>")<<"\n";
-//        }
-//        if(ui->checkBox_71->isChecked() == true)
-//        {
-//            QVector<double> VpositionError_save = VpositionError_bk + VpositionError;
-//            dataOut<<tr("<位置误差 nm,")<<VpositionError_save.size()<<">"<<"\n";
-//            for(int i = 0;i<VpositionError_save.size();i++)
-//            {
-//                progressDialog->setValue(VlatitudeErrorNum+VlongitudeErrorNum+i);
-//                if(progressDialog->wasCanceled())
-//                {
-//                    delete progressDialog;
-//                    fileSave.close();
-//                    fileSave.remove();
-//                    return;
-
-//                }
-//                dataOut<<VpositionError_save[i]<<",";
-//            }
-//            dataOut<<tr("\n</位置误差>")<<"\n";
-//        }
-//    }
-
-//    dataOut<<"</CurveProfile>";
-//    fileSave.close();
-//    delete progressDialog;
-//    progressDialog = NULL;
-//    QMessageBox::information(NULL, "提示", "保存成功！");
-//    if(ui->btn_openPort->text()=="关闭串口")
-//    {
-
-//        serial_1->flush();
-
-//    }
-
-//}
-
 void MainWindow::bookLog(QString bookStr)
 {
     QDateTime current_date_time =QDateTime::currentDateTime();
@@ -12003,19 +10712,29 @@ void MainWindow::bookLog(QString bookStr)
 void MainWindow::doDataSendWork(const QByteArray data)
 {
         // 发送数据
-    if(ui->btn_openPort->text()=="打开串口")
+    if(ui->btn_openPort->text()=="打开串口"||ui->btn_openPort->text()=="Open Serial")
     {
         return;
     }
-        serial_1->write(data);
+    serial_1->write(data);
+}
+void MainWindow::onattitudeDataCMD(const QByteArray data)
+{
+    // 发送数据
+    if(ui->btn_openPort->text()=="打开串口"||ui->btn_openPort->text()=="Open Serial")
+    {
+        return;
+    }
+    serial_1->write(data);
+    fisrstQuery = 1;
 }
 #endif
 void MainWindow::on_pushButton_11_clicked()
 {
     //判断打开串口是否打开
-    if(ui->btn_openPort->text()=="打开串口")
+    if(ui->btn_openPort->text()=="打开串口"||ui->btn_openPort->text()=="Open Serial")
     {
-        QMessageBox::information(NULL, "提示", "串口未打开！");
+        QMessageBox::information(NULL, tr("提示"), tr("串口未打开！"));
         return;
     }
     sysHeightData->show();
@@ -12049,7 +10768,7 @@ void MainWindow::on_pushButton_13_clicked()
     bool res = dir.mkpath(currentPath);
     if(!res)
     {
-        QMessageBox::warning(NULL, "提示", "创建曲线文件夹失败！");
+        QMessageBox::warning(NULL, tr("提示"), "创建曲线文件夹失败！");
         return;
     }
     //保存所有曲线
@@ -12789,11 +11508,21 @@ void MainWindow::on_pushButton_13_clicked()
 
     delete progressDialog;
     progressDialog = NULL;
-    QMessageBox::information(NULL, "提示", "保存成功！");
+    QMessageBox::information(NULL, tr("提示"), tr("保存成功！"));
 
-    if(ui->btn_openPort->text() !=QString("打开串口"))
+    if(isEng ==0)
     {
-        serial_1->flush();
+        if(ui->btn_openPort->text() !=QString("打开串口"))
+        {
+            serial_1->flush();
+        }
+    }
+    else
+    {
+        if(ui->btn_openPort->text() !=QString("Open Serial"))
+        {
+            serial_1->flush();
+        }
     }
 
 }
@@ -13083,9 +11812,14 @@ void MainWindow::on_action_4_triggered()
 
 void MainWindow::closeEvent(QCloseEvent *e)
 {
-    if(ui->btn_openPort->text() !=QString("打开串口"))
+    QString Portstr;
+    if(isEng==0)
+        Portstr = QString("打开串口");
+    else
+        Portstr = QString("Open Serial");
+    if(ui->btn_openPort->text() !=Portstr)
     {
-        QMessageBox::warning(this,"关闭程序","请关闭串口后再退出！");
+        QMessageBox::warning(this,tr("关闭程序"),tr("请关闭串口后再退出！"));
         e->ignore();
 
     }
@@ -16667,7 +15401,7 @@ void MainWindow::on_pushButton_10_clicked()
         delete progressDialog;
         file.close();
         progressDialog = NULL;
-        QMessageBox::information(NULL, "提示", "打开成功！");
+        QMessageBox::information(NULL, tr("提示"), "打开成功！");
     }
 }
 //void MainWindow::drawAllCurve()
@@ -19049,15 +17783,15 @@ void MainWindow::on_pushButton_9_clicked()
     //弹窗确认
     QMessageBox::StandardButton rb;
 
-    rb = QMessageBox::question(this, tr("确认"),tr("确认要发送指令吗？"),QMessageBox::Yes | QMessageBox::No,QMessageBox::Yes);
+//    rb = QMessageBox::question(this, tr("确认"),tr("确认要发送指令吗？"),QMessageBox::Yes | QMessageBox::No,QMessageBox::Yes);
 
     //如果按下了不是按钮
-    if (rb == QMessageBox::No)
-    {
-        return;
-    }
+//    if (rb == QMessageBox::No)
+//    {
+//        return;
+//    }
     QByteArray data;
-    if(ui->comboBox_6->currentText() == "使能")
+    if(ui->comboBox_6->currentIndex() == 1)
     {
          data = QByteArray::fromHex("EB90150217");
     }
@@ -21668,7 +20402,7 @@ void MainWindow::resetY()
 void MainWindow::on_checkBox_91_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_91->setChecked(0);
         return;
     }
@@ -21681,7 +20415,7 @@ void MainWindow::on_checkBox_91_toggled(bool checked)
 void MainWindow::on_checkBox_88_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_88->setChecked(0);
         return;
     }
@@ -21691,7 +20425,7 @@ void MainWindow::on_checkBox_88_toggled(bool checked)
 void MainWindow::on_checkBox_93_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_93->setChecked(0);
         return;
     }
@@ -21701,7 +20435,7 @@ void MainWindow::on_checkBox_93_toggled(bool checked)
 void MainWindow::on_checkBox_90_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_90->setChecked(0);
         return;
     }
@@ -21711,7 +20445,7 @@ void MainWindow::on_checkBox_90_toggled(bool checked)
 void MainWindow::on_checkBox_89_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_89->setChecked(0);
         return;
     }
@@ -21721,7 +20455,7 @@ void MainWindow::on_checkBox_89_toggled(bool checked)
 void MainWindow::on_checkBox_92_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_92->setChecked(0);
         return;
     }
@@ -21731,7 +20465,7 @@ void MainWindow::on_checkBox_92_toggled(bool checked)
 void MainWindow::on_checkBox_94_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_94->setChecked(0);
         return;
     }
@@ -21741,7 +20475,7 @@ void MainWindow::on_checkBox_94_toggled(bool checked)
 void MainWindow::on_checkBox_95_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == 1)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_95->setChecked(0);
         return;
     }
@@ -21751,7 +20485,7 @@ void MainWindow::on_checkBox_95_toggled(bool checked)
 void MainWindow::on_checkBox_96_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_96->setChecked(0);
         return;
     }
@@ -21761,7 +20495,7 @@ void MainWindow::on_checkBox_96_toggled(bool checked)
 void MainWindow::on_checkBox_97_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_97->setChecked(0);
         return;
     }
@@ -21771,7 +20505,7 @@ void MainWindow::on_checkBox_97_toggled(bool checked)
 void MainWindow::on_checkBox_98_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_98->setChecked(0);
         return;
     }
@@ -21781,7 +20515,7 @@ void MainWindow::on_checkBox_98_toggled(bool checked)
 void MainWindow::on_checkBox_99_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_99->setChecked(0);
         return;
     }
@@ -21791,7 +20525,7 @@ void MainWindow::on_checkBox_99_toggled(bool checked)
 void MainWindow::on_checkBox_100_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_100->setChecked(0);
         return;
     }
@@ -21801,7 +20535,7 @@ void MainWindow::on_checkBox_100_toggled(bool checked)
 void MainWindow::on_checkBox_101_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_101->setChecked(0);
         return;
     }
@@ -21811,7 +20545,7 @@ void MainWindow::on_checkBox_101_toggled(bool checked)
 void MainWindow::on_checkBox_102_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_102->setChecked(0);
         return;
     }
@@ -21821,7 +20555,7 @@ void MainWindow::on_checkBox_102_toggled(bool checked)
 void MainWindow::on_checkBox_106_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_106->setChecked(0);
         return;
     }
@@ -21831,7 +20565,7 @@ void MainWindow::on_checkBox_106_toggled(bool checked)
 void MainWindow::on_checkBox_103_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_103->setChecked(0);
         return;
     }
@@ -21841,7 +20575,7 @@ void MainWindow::on_checkBox_103_toggled(bool checked)
 void MainWindow::on_checkBox_108_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_108->setChecked(0);
         return;
     }
@@ -21851,7 +20585,7 @@ void MainWindow::on_checkBox_108_toggled(bool checked)
 void MainWindow::on_checkBox_105_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_105->setChecked(0);
         return;
     }
@@ -21861,7 +20595,7 @@ void MainWindow::on_checkBox_105_toggled(bool checked)
 void MainWindow::on_checkBox_104_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_104->setChecked(0);
         return;
     }
@@ -21871,7 +20605,7 @@ void MainWindow::on_checkBox_104_toggled(bool checked)
 void MainWindow::on_checkBox_107_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_107->setChecked(0);
         return;
     }
@@ -21881,7 +20615,7 @@ void MainWindow::on_checkBox_107_toggled(bool checked)
 void MainWindow::on_checkBox_113_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_113->setChecked(0);
         return;
     }
@@ -21891,7 +20625,7 @@ void MainWindow::on_checkBox_113_toggled(bool checked)
 void MainWindow::on_checkBox_111_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_111->setChecked(0);
         return;
     }
@@ -21901,7 +20635,7 @@ void MainWindow::on_checkBox_111_toggled(bool checked)
 void MainWindow::on_checkBox_112_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_112->setChecked(0);
         return;
     }
@@ -21911,7 +20645,7 @@ void MainWindow::on_checkBox_112_toggled(bool checked)
 void MainWindow::on_checkBox_110_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_110->setChecked(0);
         return;
     }
@@ -21921,7 +20655,7 @@ void MainWindow::on_checkBox_110_toggled(bool checked)
 void MainWindow::on_checkBox_109_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_109->setChecked(0);
         return;
     }
@@ -21931,7 +20665,7 @@ void MainWindow::on_checkBox_109_toggled(bool checked)
 void MainWindow::on_checkBox_114_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_114->setChecked(0);
         return;
     }
@@ -21941,7 +20675,7 @@ void MainWindow::on_checkBox_114_toggled(bool checked)
 void MainWindow::on_checkBox_117_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_117->setChecked(0);
         return;
     }
@@ -21951,7 +20685,7 @@ void MainWindow::on_checkBox_117_toggled(bool checked)
 void MainWindow::on_checkBox_116_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_116->setChecked(0);
         return;
     }
@@ -21961,7 +20695,7 @@ void MainWindow::on_checkBox_116_toggled(bool checked)
 void MainWindow::on_checkBox_115_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_115->setChecked(0);
         return;
     }
@@ -21971,7 +20705,7 @@ void MainWindow::on_checkBox_115_toggled(bool checked)
 void MainWindow::on_checkBox_120_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_120->setChecked(0);
         return;
     }
@@ -21981,7 +20715,7 @@ void MainWindow::on_checkBox_120_toggled(bool checked)
 void MainWindow::on_checkBox_118_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_118->setChecked(0);
         return;
     }
@@ -21991,7 +20725,7 @@ void MainWindow::on_checkBox_118_toggled(bool checked)
 void MainWindow::on_checkBox_119_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_119->setChecked(0);
         return;
     }
@@ -22001,7 +20735,7 @@ void MainWindow::on_checkBox_119_toggled(bool checked)
 void MainWindow::on_checkBox_123_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_123->setChecked(0);
         return;
     }
@@ -22011,7 +20745,7 @@ void MainWindow::on_checkBox_123_toggled(bool checked)
 void MainWindow::on_checkBox_122_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_122->setChecked(0);
         return;
     }
@@ -22021,7 +20755,7 @@ void MainWindow::on_checkBox_122_toggled(bool checked)
 void MainWindow::on_checkBox_121_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_121->setChecked(0);
         return;
     }
@@ -22031,7 +20765,7 @@ void MainWindow::on_checkBox_121_toggled(bool checked)
 void MainWindow::on_checkBox_124_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_124->setChecked(0);
         return;
     }
@@ -22041,7 +20775,7 @@ void MainWindow::on_checkBox_124_toggled(bool checked)
 void MainWindow::on_checkBox_125_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_125->setChecked(0);
         return;
     }
@@ -22051,7 +20785,7 @@ void MainWindow::on_checkBox_125_toggled(bool checked)
 void MainWindow::on_checkBox_126_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_126->setChecked(0);
         return;
     }
@@ -22061,7 +20795,7 @@ void MainWindow::on_checkBox_126_toggled(bool checked)
 void MainWindow::on_checkBox_127_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_127->setChecked(0);
         return;
     }
@@ -22071,7 +20805,7 @@ void MainWindow::on_checkBox_127_toggled(bool checked)
 void MainWindow::on_checkBox_128_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_128->setChecked(0);
         return;
     }
@@ -22081,7 +20815,7 @@ void MainWindow::on_checkBox_128_toggled(bool checked)
 void MainWindow::on_checkBox_129_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_129->setChecked(0);
         return;
     }
@@ -22091,7 +20825,7 @@ void MainWindow::on_checkBox_129_toggled(bool checked)
 void MainWindow::on_checkBox_130_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_130->setChecked(0);
         return;
     }
@@ -22101,7 +20835,7 @@ void MainWindow::on_checkBox_130_toggled(bool checked)
 void MainWindow::on_checkBox_131_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_131->setChecked(0);
         return;
     }
@@ -22111,7 +20845,7 @@ void MainWindow::on_checkBox_131_toggled(bool checked)
 void MainWindow::on_checkBox_132_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_132->setChecked(0);
         return;
     }
@@ -22121,7 +20855,7 @@ void MainWindow::on_checkBox_132_toggled(bool checked)
 void MainWindow::on_checkBox_133_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_133->setChecked(0);
         return;
     }
@@ -22131,7 +20865,7 @@ void MainWindow::on_checkBox_133_toggled(bool checked)
 void MainWindow::on_checkBox_134_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_134->setChecked(0);
         return;
     }
@@ -22141,7 +20875,7 @@ void MainWindow::on_checkBox_134_toggled(bool checked)
 void MainWindow::on_checkBox_135_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_135->setChecked(0);
         return;
     }
@@ -22151,7 +20885,7 @@ void MainWindow::on_checkBox_135_toggled(bool checked)
 void MainWindow::on_checkBox_137_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_137->setChecked(0);
         return;
     }
@@ -22161,7 +20895,7 @@ void MainWindow::on_checkBox_137_toggled(bool checked)
 void MainWindow::on_checkBox_138_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_138->setChecked(0);
         return;
     }
@@ -22171,7 +20905,7 @@ void MainWindow::on_checkBox_138_toggled(bool checked)
 void MainWindow::on_checkBox_136_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_136->setChecked(0);
         return;
     }
@@ -22181,7 +20915,7 @@ void MainWindow::on_checkBox_136_toggled(bool checked)
 void MainWindow::on_checkBox_141_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_141->setChecked(0);
         return;
     }
@@ -22191,7 +20925,7 @@ void MainWindow::on_checkBox_141_toggled(bool checked)
 void MainWindow::on_checkBox_140_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_140->setChecked(0);
         return;
     }
@@ -22201,7 +20935,7 @@ void MainWindow::on_checkBox_140_toggled(bool checked)
 void MainWindow::on_checkBox_139_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_139->setChecked(0);
         return;
     }
@@ -22211,7 +20945,7 @@ void MainWindow::on_checkBox_139_toggled(bool checked)
 void MainWindow::on_checkBox_143_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_143->setChecked(0);
         return;
     }
@@ -22221,7 +20955,7 @@ void MainWindow::on_checkBox_143_toggled(bool checked)
 void MainWindow::on_checkBox_144_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_144->setChecked(0);
         return;
     }
@@ -22231,7 +20965,7 @@ void MainWindow::on_checkBox_144_toggled(bool checked)
 void MainWindow::on_checkBox_142_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_142->setChecked(0);
         return;
     }
@@ -22241,7 +20975,7 @@ void MainWindow::on_checkBox_142_toggled(bool checked)
 void MainWindow::on_checkBox_145_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_145->setChecked(0);
         return;
     }
@@ -22251,7 +20985,7 @@ void MainWindow::on_checkBox_145_toggled(bool checked)
 void MainWindow::on_checkBox_146_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_146->setChecked(0);
         return;
     }
@@ -22261,7 +20995,7 @@ void MainWindow::on_checkBox_146_toggled(bool checked)
 void MainWindow::on_checkBox_147_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_147->setChecked(0);
         return;
     }
@@ -22271,7 +21005,7 @@ void MainWindow::on_checkBox_147_toggled(bool checked)
 void MainWindow::on_checkBox_151_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_151->setChecked(0);
         return;
     }
@@ -22281,7 +21015,7 @@ void MainWindow::on_checkBox_151_toggled(bool checked)
 void MainWindow::on_checkBox_152_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_152->setChecked(0);
         return;
     }
@@ -22291,7 +21025,7 @@ void MainWindow::on_checkBox_152_toggled(bool checked)
 void MainWindow::on_checkBox_153_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_153->setChecked(0);
         return;
     }
@@ -22301,7 +21035,7 @@ void MainWindow::on_checkBox_153_toggled(bool checked)
 void MainWindow::on_checkBox_149_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_149->setChecked(0);
         return;
     }
@@ -22311,7 +21045,7 @@ void MainWindow::on_checkBox_149_toggled(bool checked)
 void MainWindow::on_checkBox_150_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_150->setChecked(0);
         return;
     }
@@ -22321,7 +21055,7 @@ void MainWindow::on_checkBox_150_toggled(bool checked)
 void MainWindow::on_checkBox_148_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_148->setChecked(0);
         return;
     }
@@ -22331,7 +21065,7 @@ void MainWindow::on_checkBox_148_toggled(bool checked)
 void MainWindow::on_checkBox_154_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_154->setChecked(0);
         return;
     }
@@ -22341,7 +21075,7 @@ void MainWindow::on_checkBox_154_toggled(bool checked)
 void MainWindow::on_checkBox_155_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_155->setChecked(0);
         return;
     }
@@ -22351,7 +21085,7 @@ void MainWindow::on_checkBox_155_toggled(bool checked)
 void MainWindow::on_checkBox_157_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_157->setChecked(0);
         return;
     }
@@ -22361,7 +21095,7 @@ void MainWindow::on_checkBox_157_toggled(bool checked)
 void MainWindow::on_checkBox_158_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_158->setChecked(0);
         return;
     }
@@ -22371,7 +21105,7 @@ void MainWindow::on_checkBox_158_toggled(bool checked)
 void MainWindow::on_checkBox_159_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_159->setChecked(0);
         return;
     }
@@ -22381,7 +21115,7 @@ void MainWindow::on_checkBox_159_toggled(bool checked)
 void MainWindow::on_checkBox_156_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_156->setChecked(0);
         return;
     }
@@ -22391,7 +21125,7 @@ void MainWindow::on_checkBox_156_toggled(bool checked)
 void MainWindow::on_checkBox_161_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_161->setChecked(0);
         return;
     }
@@ -22401,7 +21135,7 @@ void MainWindow::on_checkBox_161_toggled(bool checked)
 void MainWindow::on_checkBox_162_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_162->setChecked(0);
         return;
     }
@@ -22411,7 +21145,7 @@ void MainWindow::on_checkBox_162_toggled(bool checked)
 void MainWindow::on_checkBox_160_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_160->setChecked(0);
         return;
     }
@@ -22421,7 +21155,7 @@ void MainWindow::on_checkBox_160_toggled(bool checked)
 void MainWindow::on_checkBox_163_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_163->setChecked(0);
         return;
     }
@@ -22431,7 +21165,7 @@ void MainWindow::on_checkBox_163_toggled(bool checked)
 void MainWindow::on_checkBox_164_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_164->setChecked(0);
         return;
     }
@@ -22441,7 +21175,7 @@ void MainWindow::on_checkBox_164_toggled(bool checked)
 void MainWindow::on_checkBox_165_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_165->setChecked(0);
         return;
     }
@@ -22451,7 +21185,7 @@ void MainWindow::on_checkBox_165_toggled(bool checked)
 void MainWindow::on_checkBox_166_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_166->setChecked(0);
         return;
     }
@@ -22461,7 +21195,7 @@ void MainWindow::on_checkBox_166_toggled(bool checked)
 void MainWindow::on_checkBox_167_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_167->setChecked(0);
         return;
     }
@@ -22471,7 +21205,7 @@ void MainWindow::on_checkBox_167_toggled(bool checked)
 void MainWindow::on_checkBox_168_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_168->setChecked(0);
         return;
     }
@@ -22481,7 +21215,7 @@ void MainWindow::on_checkBox_168_toggled(bool checked)
 void MainWindow::on_checkBox_169_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_169->setChecked(0);
         return;
     }
@@ -22491,7 +21225,7 @@ void MainWindow::on_checkBox_169_toggled(bool checked)
 void MainWindow::on_checkBox_170_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_170->setChecked(0);
         return;
     }
@@ -22501,7 +21235,7 @@ void MainWindow::on_checkBox_170_toggled(bool checked)
 void MainWindow::on_checkBox_171_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_171->setChecked(0);
         return;
     }
@@ -22512,7 +21246,7 @@ void MainWindow::on_checkBox_171_toggled(bool checked)
 void MainWindow::on_checkBox_172_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_172->setChecked(0);
         return;
     }
@@ -22523,7 +21257,7 @@ void MainWindow::on_checkBox_172_toggled(bool checked)
 void MainWindow::on_checkBox_173_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_173->setChecked(0);
         return;
     }
@@ -22534,7 +21268,7 @@ void MainWindow::on_checkBox_173_toggled(bool checked)
 void MainWindow::on_checkBox_174_toggled(bool checked)
 {
     if(graphPointNum==0 && checked == true)    {
-        QMessageBox::information(NULL, "提示", "无历史曲线数据！");
+        QMessageBox::information(NULL, tr("提示"), tr("无历史曲线数据！"));
         ui->checkBox_174->setChecked(0);
         return;
     }
@@ -22551,4 +21285,96 @@ void MainWindow::on_pushButton_111_clicked()
 void MainWindow::on_pushButton_14_clicked()
 {
     configBaudData->show();
+}
+
+void MainWindow::on_pushButton_16_clicked()
+{
+    voltageData->show();
+}
+
+
+void MainWindow::keyPressEvent(QKeyEvent *keyevent)
+{
+    if(keyevent->key()==Qt::Key_F5)
+    {
+        if(ui->btn_openPort->text() == tr("关闭串口") || ui->btn_openPort->text() == "Close Serial")
+        {
+            QMessageBox::information(NULL, tr("提示"), tr("先关闭串口！"));
+            return;
+        }
+        if(isEng == 0)
+        {
+            isEng = 1;
+
+            QString buff = QCoreApplication::applicationDirPath()+ "/";
+            ui->actionChinese->setChecked(false);
+            ui->actionEnglish->setChecked(true);
+            trans->load(buff+"en.qm");
+
+            qApp->installTranslator(trans);
+            ui->retranslateUi(this);
+            this->setWindowTitle("INSGUIv3.2.16");
+            emit(F1en());
+        }
+        else
+        {
+            isEng = 0;
+            //QTranslator trans;
+            QString buff = QCoreApplication::applicationDirPath()+ "/";
+            ui->actionEnglish->setChecked(false);
+            ui->actionChinese->setChecked(true);
+
+            trans->load(buff+"zh.qm");
+            qApp->installTranslator(trans);
+            ui->retranslateUi(this);
+            this->setWindowTitle("惯导调试上位机v3.2.16");
+            emit(F2zh());
+        }
+    }
+}
+
+void MainWindow::on_actionEnglish_triggered()
+{
+    // 如果已经切换过或者是当前语言，不做处理
+    if (isEng == 1) return;
+
+    // 串口检查
+    if(ui->btn_openPort->text() == tr("关闭串口") || ui->btn_openPort->text() == "Close Serial")
+    {
+        QMessageBox::information(this, tr("提示"), tr("先关闭串口！"));
+        // 拦截：强制把勾选换回中文
+        ui->actionChinese->setChecked(true);
+        return;
+    }
+
+    // 执行切换
+    isEng = 1;
+    QString buff = QCoreApplication::applicationDirPath() + "/";
+    if(trans->load(buff + "en.qm")) {
+        qApp->installTranslator(trans);
+        ui->retranslateUi(this);
+        this->setWindowTitle("INSGUIv3.2.16");
+        emit F1en();
+    }
+}
+
+void MainWindow::on_actionChinese_triggered()
+{
+    if (isEng == 0) return;
+
+    if(ui->btn_openPort->text() == tr("关闭串口") || ui->btn_openPort->text() == "Close Serial")
+    {
+        QMessageBox::information(this, tr("提示"), tr("先关闭串口！"));
+        ui->actionEnglish->setChecked(true);
+        return;
+    }
+
+    isEng = 0;
+    QString buff = QCoreApplication::applicationDirPath() + "/";
+    if(trans->load(buff + "zh.qm")) {
+        qApp->installTranslator(trans);
+        ui->retranslateUi(this);
+        this->setWindowTitle("惯导调试上位机v3.2.16");
+        emit F2zh();
+    }
 }

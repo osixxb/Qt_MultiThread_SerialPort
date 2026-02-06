@@ -1,4 +1,4 @@
-#include "configbaud.h"
+﻿#include "configbaud.h"
 #include "ui_configbaud.h"
 #define MINBYTE 2400
 using namespace std;
@@ -9,170 +9,87 @@ configBaud::configBaud(QWidget *parent) :
     ui->setupUi(this);
     // 在构造函数或者初始化函数中，连接信号和槽
     connect(ui->comboBox, SIGNAL(currentIndexChanged(QString)), this, SLOT(updateComboBox2BasedOnBaudrate()));
+    connect(parent,SIGNAL(F1en()),this,SLOT(setEnLan()));
+    connect(parent,SIGNAL(F2zh()),this,SLOT(setZhLan()));
 }
 
 configBaud::~configBaud()
 {
     delete ui;
 }
-
+void configBaud::setEnLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"en.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
+void configBaud::setZhLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"zh.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
 void configBaud::on_pushButton_clicked()
 {
     QByteArray data;
-    QString sBuff;
-     if(ui->comboBox->currentText() == "2400")
-    {
 
-          sBuff = "EB901701";
+        // 固定头字节
+        data.append(0xEB);  // 头字节1
+        data.append(0x90);  // 头字节2
+        data.append(0x17);  // 命令标识
 
-    }
-    else if(ui->comboBox->currentText() == "3600")
-    {
-          sBuff = "EB901702";
+        // 从 UI 获取串口号
+        int comPort = ui->comboBox_3->currentIndex(); // 获取选中的串口号索引 (COM1 = 0, COM2 = 1, ...)
+        if (comPort < 0 || comPort > 5) {
+            //qDebug() << "Invalid COM port selection!";
+            return;
+        }
 
-    }
-    else if(ui->comboBox->currentText() == "4800")
-    {
-          sBuff = "EB901703";
+        // 从 UI 获取发送/接收模式
+        int mode = ui->comboBox_4->currentIndex(); // 0：发送，1：接收
+        if (mode != 0 && mode != 1) {
+           // qDebug() << "Invalid mode selection!";
+            return;
+        }
 
-    }
-    else if(ui->comboBox->currentText() == "7200")
-    {
-          sBuff = "EB901704";
+        // 配置串口号 (Bit8 | COM port)
+        uint8_t comPortConfig = (mode << 7) | (1<<comPort);
+        data.append(comPortConfig);
 
-    }
-    else if(ui->comboBox->currentText() == "9600")
-    {
-          sBuff = "EB901705";
+        // 从 UI 获取波特率
+        int baudRateIndex = ui->comboBox->currentIndex(); // 波特率对应的索引 (0x01 到 0x0E)
+        if (baudRateIndex < 0 || baudRateIndex > 13) {
+            //qDebug() << "Invalid baud rate selection!";
+            return;
+        }
+        uint8_t baudRate = static_cast<uint8_t>(baudRateIndex + 1); // 索引 0 对应 0x01，依次递增
+        data.append(baudRate);
 
-    }
-    else if(ui->comboBox->currentText() == "14400")
-    {
-          sBuff = "EB901706";
+        // 从 UI 获取输出频率
+        int outputFreqIndex = ui->comboBox_2->currentIndex(); // 输出频率对应的索引 (0x01 到 0x0A)
+        if (outputFreqIndex < 0 || outputFreqIndex > 9) {
+           // qDebug() << "Invalid output frequency selection!";
+            return;
+        }
+        uint8_t outputFrequency = static_cast<uint8_t>(outputFreqIndex + 1); // 索引 0 对应 0x01，依次递增
+        data.append(outputFrequency);
 
-    }
-    else if(ui->comboBox->currentText() == "19200")
-    {
-          sBuff = "EB901707";
+        // 计算校验和（从字节2到字节5的累加和）
+        uint8_t checksum = 0;
+        for (int i = 2; i < data.size(); ++i) {
+            checksum += static_cast<uint8_t>(data[i]);
+        }
+        data.append(checksum);
 
-    }
-    else if(ui->comboBox->currentText() == "28800")
-    {
-          sBuff = "EB901708";
+        // 调试输出生成的数据帧
+       // qDebug() << "Generated Data Frame:" << data.toHex();
 
-    }
-    else if(ui->comboBox->currentText() == "38400")
-    {
-          sBuff = "EB901709";
-
-    }
-    else if(ui->comboBox->currentText() == "57600")
-    {
-          sBuff = "EB90170A";
-
-    }
-    else if(ui->comboBox->currentText() == "115200")
-    {
-          sBuff = "EB90170B";
-
-    }
-    else if(ui->comboBox->currentText() == "230400")
-    {
-          sBuff = "EB90170C";
-
-    }
-    else if(ui->comboBox->currentText() == "460800")
-    {
-          sBuff = "EB90170D";
-
-    }
-    else if(ui->comboBox->currentText() == "921600")
-    {
-          sBuff = "EB90170E";
-
-    }
-
-    int iBaud = ui->comboBox->currentText().toInt();
-     float fHz;
-    if(ui->comboBox_2->currentText() == "0.1Hz")
-    {
-          fHz = 0.1;
-          sBuff = sBuff+"01";
-
-    }
-    else if(ui->comboBox_2->currentText() == "0.5Hz")
-    {
-        fHz = 0.5;
-        sBuff = sBuff+"02";
-
-    }
-    else if(ui->comboBox_2->currentText() == "1Hz")
-    {
-         fHz = 1.0;
-         sBuff = sBuff+"03";
-
-    }
-    else if(ui->comboBox_2->currentText() == "5Hz")
-    {
-         fHz = 5.0;
-         sBuff = sBuff+"04";
-
-    }
-    else if(ui->comboBox_2->currentText() == "10Hz")
-    {
-         fHz = 10.0;
-         sBuff = sBuff+"05";
-
-    }
-    else if(ui->comboBox_2->currentText() == "50Hz")
-    {
-         fHz = 50;
-         sBuff = sBuff+"06";
-
-    }
-    else if(ui->comboBox_2->currentText() == "100Hz")
-    {
-         fHz = 100.0;
-         sBuff = sBuff+"07";
-
-    }
-    else if(ui->comboBox_2->currentText() == "250Hz")
-    {
-         fHz = 250.0;
-         sBuff = sBuff+"08";
-
-    }
-    else if(ui->comboBox_2->currentText() == "500Hz")
-    {
-         fHz = 500.0;
-         sBuff = sBuff+"09";
-
-    }
-    else if(ui->comboBox_2->currentText() == "1000Hz")
-    {
-         fHz = 1000.0;
-         sBuff = sBuff+"0A";
-    }   
-    sBuff = appendChecksum(sBuff);
-    data = QByteArray::fromHex(sBuff.toUtf8());
-    if(iBaud/(8*fHz)>2400)
-    {
-        //输入日志
-        // 获取当前时间字符串
-        QDateTime current_date_time =QDateTime::currentDateTime();
-        QString dateStr =current_date_time.toString("[yyyy-MM-dd hh:mm:ss]");
-        QString dateTimeStr = dateStr + "\n";
-        QString bookDataStr = tr("配置波特率和输出频率命令：") + tr("波特率=")+ ui->comboBox->currentText() +tr("；输出频率=")+ ui->comboBox_2->currentText() + "\n";
-        QString sendBookDataStr = dateTimeStr+bookDataStr;
-        emit bookLogCMD(sendBookDataStr);
-
+        // 发射信号（发送指令）
         emit statesChangeCMD(data);
-    }
-    else
-    {
-        QMessageBox::about(NULL, "提示", "配置失败,波特率÷8÷输出频率>2400字节");
-        return;
-    }
 
 
 }

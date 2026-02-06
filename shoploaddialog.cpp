@@ -8,13 +8,30 @@ ShopLoadDialog::ShopLoadDialog(QWidget *parent) :
     ui(new Ui::ShopLoadDialog)
 {
     ui->setupUi(this);
+    connect(parent,SIGNAL(F1en()),this,SLOT(setEnLan()));
+    connect(parent,SIGNAL(F2zh()),this,SLOT(setZhLan()));
 }
 
 ShopLoadDialog::~ShopLoadDialog()
 {
     delete ui;
 }
-
+void ShopLoadDialog::setEnLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"en.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
+void ShopLoadDialog::setZhLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"zh.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
 void ShopLoadDialog::on_pushButton_clicked()
 {
     QByteArray Sdata;

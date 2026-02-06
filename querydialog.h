@@ -2,7 +2,7 @@
 #define QUERYDIALOG_H
 
 #include <QDialog>
-
+#include <QTranslator>
 namespace Ui {
 class QueryDialog;
 }
@@ -15,6 +15,9 @@ public:
     explicit QueryDialog(QWidget *parent = nullptr);
     ~QueryDialog();
 
+public slots:
+    void setEnLan();
+    void setZhLan();
 private slots:
     void on_pushButton_7_clicked();
 

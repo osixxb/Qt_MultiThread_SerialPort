@@ -2,7 +2,7 @@
 #define TEMPCOMPENCOEFFDIALOG_H
 
 #include <QDialog>
-
+#include <QTranslator>
 namespace Ui {
 class TempCompenCoeffDialog;
 }
@@ -15,6 +15,9 @@ public:
     explicit TempCompenCoeffDialog(QWidget *parent = nullptr);
     ~TempCompenCoeffDialog();
 
+public slots:
+    void setZhLan();
+    void setEnLan();
 private:
     Ui::TempCompenCoeffDialog *ui;
 

@@ -8,13 +8,30 @@ LeverArmDialog::LeverArmDialog(QWidget *parent) :
     ui(new Ui::LeverArmDialog)
 {
     ui->setupUi(this);
+    connect(parent,SIGNAL(F1en()),this,SLOT(setEnLan()));
+    connect(parent,SIGNAL(F2zh()),this,SLOT(setZhLan()));
 }
 
 LeverArmDialog::~LeverArmDialog()
 {
     delete ui;
 }
-
+void LeverArmDialog::setEnLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"en.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
+void LeverArmDialog::setZhLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"zh.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
 void LeverArmDialog::on_pushButton_clicked()
 {
 

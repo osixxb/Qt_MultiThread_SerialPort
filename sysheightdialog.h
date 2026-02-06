@@ -2,7 +2,7 @@
 #define SYSHEIGHTDIALOG_H
 
 #include <QDialog>
-
+#include <QTranslator>
 namespace Ui {
 class sysHeightDialog;
 }
@@ -14,6 +14,9 @@ class sysHeightDialog : public QDialog
 public:
     explicit sysHeightDialog(QWidget *parent = nullptr);
     ~sysHeightDialog();
+public slots:
+    void setZhLan();
+    void setEnLan();
 signals:
     void sysHeightDataCMD(const QByteArray result);
     void bookLogCMD(QString bookDataStr);

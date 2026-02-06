@@ -5,6 +5,7 @@
 #include <QByteArray>
 #include <QTime>
 #include <QMessageBox>
+#include <QTranslator>
 namespace Ui {
 class configBaud;
 }
@@ -21,6 +22,8 @@ public:
     QString appendChecksum(const QString& input);
 public slots:
     void updateComboBox2BasedOnBaudrate();
+    void setEnLan();
+    void setZhLan();
 private slots:
     void on_pushButton_clicked();
 

@@ -166,14 +166,6 @@ Makefile: Qt_MultiThread_SerialPort.pro D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/w
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_quicktemplates2_private.pri \
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_quickwidgets.pri \
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_quickwidgets_private.pri \
-		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_remoteobjects.pri \
-		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_remoteobjects_private.pri \
-		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_repparser.pri \
-		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_repparser_private.pri \
-		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_script.pri \
-		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_script_private.pri \
-		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_scripttools.pri \
-		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_scripttools_private.pri \
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_scxml.pri \
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_scxml_private.pri \
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_sensors.pri \
@@ -188,8 +180,6 @@ Makefile: Qt_MultiThread_SerialPort.pro D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/w
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_svg_private.pri \
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_testlib.pri \
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_testlib_private.pri \
-		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_texttospeech.pri \
-		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_texttospeech_private.pri \
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_theme_support_private.pri \
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_uiplugin.pri \
 		D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_uitools.pri \
@@ -345,14 +335,6 @@ D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_quickparticles_private.pri
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_quicktemplates2_private.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_quickwidgets.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_quickwidgets_private.pri:
-D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_remoteobjects.pri:
-D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_remoteobjects_private.pri:
-D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_repparser.pri:
-D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_repparser_private.pri:
-D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_script.pri:
-D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_script_private.pri:
-D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_scripttools.pri:
-D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_scripttools_private.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_scxml.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_scxml_private.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_sensors.pri:
@@ -367,8 +349,6 @@ D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_svg.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_svg_private.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_testlib.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_testlib_private.pri:
-D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_texttospeech.pri:
-D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_texttospeech_private.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_theme_support_private.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_uiplugin.pri:
 D:/Qt/Qt5.9.9/5.9.9/mingw53_32/mkspecs/modules/qt_lib_uitools.pri:

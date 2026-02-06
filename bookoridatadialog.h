@@ -3,6 +3,7 @@
 
 #include <QDialog>
 #include "common.h"
+#include <QTranslator>
 namespace Ui {
 class BookOriDataDialog;
 }
@@ -16,6 +17,9 @@ public:
     ~BookOriDataDialog();
     //QByteArray HexStringToByteArray(QString HexString);
 
+public slots:
+    void setEnLan();
+    void setZhLan();
 private slots:
     void on_pushButton_4_clicked();
     void on_pushButton_clicked();

@@ -8,13 +8,30 @@ CalibratParaDialog::CalibratParaDialog(QWidget *parent) :
     ui(new Ui::CalibratParaDialog)
 {
     ui->setupUi(this);
+    connect(parent,SIGNAL(F1en()),this,SLOT(setEnLan()));
+    connect(parent,SIGNAL(F2zh()),this,SLOT(setZhLan()));
 }
 
 CalibratParaDialog::~CalibratParaDialog()
 {
     delete ui;
 }
-
+void CalibratParaDialog::setEnLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"en.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
+void CalibratParaDialog::setZhLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"zh.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
 void CalibratParaDialog::on_pushButton_clicked()
 {
     QByteArray Sdata;

@@ -7,13 +7,30 @@ TempCompenCoeffDialog::TempCompenCoeffDialog(QWidget *parent) :
     ui(new Ui::TempCompenCoeffDialog)
 {
     ui->setupUi(this);
+    connect(parent,SIGNAL(F1en()),this,SLOT(setEnLan()));
+    connect(parent,SIGNAL(F2zh()),this,SLOT(setZhLan()));
 }
 
 TempCompenCoeffDialog::~TempCompenCoeffDialog()
 {
     delete ui;
 }
-
+void TempCompenCoeffDialog::setEnLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"en.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
+void TempCompenCoeffDialog::setZhLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"zh.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
 void TempCompenCoeffDialog::on_pushButton_clicked()
 {
     QByteArray Sdata;

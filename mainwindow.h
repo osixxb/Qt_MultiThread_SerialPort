@@ -19,7 +19,6 @@ QT_BEGIN_NAMESPACE
 #include "serialinterfacedialog.h"
 #include <QFile>
 #include <QFileDialog>
-#include "qextserialport.h"
 #include <QDebug>
 #include <QMessageBox>
 #include <QDateTime>
@@ -35,6 +34,8 @@ QT_BEGIN_NAMESPACE
 #include "xxwcustomplot.h"
 #include "xxwtracer.h"
 #include "configbaud.h"
+#include "voltagedialog.h"
+#include "common.h"
 
 #define QEXTSERIALPORT
 //#define SERIALPORT
@@ -94,6 +95,8 @@ void handleResults(QByteArray result);
 
     void startTimer();
     //void getCurveData();
+    void onqtimeQueryZero();
+    void onattitudeDataCMD(const QByteArray data);
 private slots:
     void on_btn_openPort_clicked();
     void drawCurveLatitude();
@@ -367,6 +370,12 @@ private slots:
 
     void on_pushButton_14_clicked();
 
+    void on_pushButton_16_clicked();
+
+    void on_actionEnglish_triggered();
+
+    void on_actionChinese_triggered();
+
 private:
     Ui::MainWindow *ui;
     QByteArray result;
@@ -380,6 +389,7 @@ private:
     QThread serialThread_1; // 定义子线程
 #endif
     QTimer *qtime;
+    QTimer *qtimeQueryZero;
     QueryDialog * paraQuery;
     BookOriDataDialog * bookOriData;
     AttitudeDialog * attitudeData;
@@ -392,9 +402,13 @@ private:
     sysHeightDialog * sysHeightData;
     handleResultDelayDialog *handleResultDelayData;
     configBaud *configBaudData;
+    VoltageDialog *voltageData;
     int datanum;
+    bool fisrstQuery;
 
-
+    float fHeadingZero;
+    float fRollZero;
+    float fPitchZero;
     void init_darw2();
     QTimer rePlotTimer;
     QTimer dataTimer2;
@@ -1145,9 +1159,16 @@ private:
     QVector<double> C8VC8LogDownSpeed2Water_bk;
     int C8LogDownSpeed2WaterRun;
     int C8LogDownSpeed2WaterNum;
+    QTranslator *trans;
 protected:
     //声明
     void mouseDoubleClickEvent(QMouseEvent*);
 
+    void keyPressEvent(QKeyEvent *keyevent);
+signals:
+    void isEN();
+    void isCN();
+    void F1en();
+    void F2zh();
 };
 #endif // MAINWINDOW_H

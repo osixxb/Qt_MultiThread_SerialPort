@@ -11,13 +11,30 @@ handleResultDelayDialog::handleResultDelayDialog(QWidget *parent) :
 
     ui->lineEdit->setText("200");
     on_pushButton_2_clicked();
+    connect(parent,SIGNAL(F1en()),this,SLOT(setEnLan()));
+    connect(parent,SIGNAL(F2zh()),this,SLOT(setZhLan()));
 }
 
 handleResultDelayDialog::~handleResultDelayDialog()
 {
     delete ui;
 }
-
+void handleResultDelayDialog::setEnLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"en.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
+void handleResultDelayDialog::setZhLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"zh.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
 void handleResultDelayDialog::on_pushButton_2_clicked()
 {
     handleResultDelay2 = ui->lineEdit->text().toInt();

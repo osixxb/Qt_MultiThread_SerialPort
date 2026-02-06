@@ -19,9 +19,26 @@ AttitudeDialog::AttitudeDialog(QWidget *parent) :
     QWidget::setTabOrder(ui->lineEdit_6,ui->lineEdit_7);
     QWidget::setTabOrder(ui->lineEdit_7,ui->lineEdit_8);
     QWidget::setTabOrder(ui->lineEdit_8,ui->lineEdit_9);
+    connect(parent,SIGNAL(F1en()),this,SLOT(setEnLan()));
+    connect(parent,SIGNAL(F2zh()),this,SLOT(setZhLan()));
 
     }
-
+void AttitudeDialog::setEnLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"en.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
+void AttitudeDialog::setZhLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"zh.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
 AttitudeDialog::~AttitudeDialog()
 {
     delete ui;
@@ -87,7 +104,7 @@ void AttitudeDialog::on_pushButton_clicked()
      QString sendBookDataStr = dateTimeStr+bookDataStr;
      emit bookLogCMD(sendBookDataStr);
 
-    emit attitudeDataCMD(Sdata);
+     emit attitudeDataCMD(Sdata);
 
 }
 

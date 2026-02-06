@@ -8,6 +8,8 @@ BookOriDataDialog::BookOriDataDialog(QWidget *parent) :
     ui(new Ui::BookOriDataDialog)
 {
     ui->setupUi(this);
+    connect(parent,SIGNAL(F1en()),this,SLOT(setEnLan()));
+    connect(parent,SIGNAL(F2zh()),this,SLOT(setZhLan()));
 }
 
 BookOriDataDialog::~BookOriDataDialog()
@@ -19,7 +21,22 @@ void BookOriDataDialog::on_pushButton_4_clicked()
 {
     this->close();
 }
-
+void BookOriDataDialog::setEnLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"en.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
+void BookOriDataDialog::setZhLan()
+{
+    QTranslator trans;
+    QString buff = QCoreApplication::applicationDirPath()+ "/";
+    trans.load(buff+"zh.qm");
+    qApp->installTranslator(&trans);
+    ui->retranslateUi(this);
+}
 void BookOriDataDialog::on_pushButton_clicked()
 {
 

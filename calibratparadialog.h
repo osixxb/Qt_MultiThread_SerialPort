@@ -2,7 +2,7 @@
 #define CALIBRATPARADIALOG_H
 
 #include <QDialog>
-
+#include <QTranslator>
 namespace Ui {
 class CalibratParaDialog;
 }
@@ -15,6 +15,9 @@ public:
     explicit CalibratParaDialog(QWidget *parent = nullptr);
     ~CalibratParaDialog();
 
+public slots:
+    void setZhLan();
+    void setEnLan();
 private slots:
     void on_pushButton_clicked();
 

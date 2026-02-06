@@ -2,7 +2,7 @@
 #define SHOPLOADDIALOG_H
 
 #include <QDialog>
-
+#include <QTranslator>
 namespace Ui {
 class ShopLoadDialog;
 }
@@ -15,6 +15,9 @@ public:
     explicit ShopLoadDialog(QWidget *parent = nullptr);
     ~ShopLoadDialog();
 
+public slots:
+    void setEnLan();
+    void setZhLan();
 private slots:
     void on_pushButton_clicked();
 
