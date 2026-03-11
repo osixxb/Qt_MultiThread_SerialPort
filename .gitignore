@@ -11,6 +11,7 @@
 *.creator
 *.creator.user
 *.pro.user
+*.pro.user*
 *日志*
 # ===== Build directories =====
 build-*/
